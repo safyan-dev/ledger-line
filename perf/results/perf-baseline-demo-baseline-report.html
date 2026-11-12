@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledgerline baseline report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 32px; background: #f6f7fb; color: #172033; }
+    main { max-width: 960px; margin: 0 auto; background: #fff; border: 1px solid #e3e7ef; border-radius: 12px; padding: 28px; }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    p { color: #5d687c; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e8ebf2; }
+    th { background: #f8f9fc; color: #5d687c; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    td:first-child { width: 42%; color: #5d687c; }
+    .ok { color: #137a51; font-weight: 600; }
+    .bad { color: #b42318; font-weight: 600; }
+    code { background: #f8f9fc; padding: 2px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Ledgerline performance report</h1>
+    <p>Test type: <strong>baseline</strong> · Run ID: <code>perf-baseline-demo</code> · Generated 2026-11-12T11:36:31.334Z</p>
+    <table>
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody><tr><td>Requests</td><td>3190</td></tr><tr><td>Throughput</td><td>52.30 req/s</td></tr><tr><td>Average response</td><td>4.45 ms</td></tr><tr><td>p50 response</td><td>3.73 ms</td></tr><tr><td>p95 response</td><td>11.42 ms</td></tr><tr><td>p99 response</td><td>16.90 ms</td></tr><tr><td>Failed requests</td><td>0.00%</td></tr><tr><td>Iterations</td><td>290</td></tr><tr><td>Max VUs</td><td>5</td></tr></tbody>
+    </table>
+    <h2>Thresholds</h2>
+    <table>
+      <thead><tr><th>Metric</th><th>Threshold</th><th>Result</th></tr></thead>
+      <tbody><tr><td>http_req_failed</td><td>rate&lt;0.01</td><td class="ok">PASS</td></tr><tr><td>http_req_duration</td><td>p(95)&lt;500</td><td class="ok">PASS</td></tr><tr><td>http_req_duration</td><td>p(99)&lt;1000</td><td class="ok">PASS</td></tr></tbody>
+    </table>
+  </main>
+</body>
+</html>

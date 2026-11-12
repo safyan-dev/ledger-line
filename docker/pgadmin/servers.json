@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Ledgerline · Postgres",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "payment_reconciliation",
+      "Username": "postgres",
+      "SSLMode": "prefer",
+      "Comment": "Demo database. Password: postgres"
+    }
+  }
+}

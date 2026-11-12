@@ -1,0 +1,12 @@
+{
+  "runId": "perf-baseline-demo",
+  "api": "http://localhost:5082",
+  "checkedAt": "2026-11-12T11:36:32Z",
+  "counts": {
+    "orders": 580,
+    "payments": 870,
+    "reconciliationRecords": 1160
+  },
+  "errors": [],
+  "passed": true
+}

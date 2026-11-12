@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus # time series database for metrics collection and visualization
+    uid: prometheus # the dashboard JSON refers to this UID.
+    type: prometheus
+    access: proxy # means Grafana’s server talks to them; browser does not need direct access.
+    url: http://prometheus:9090
+    isDefault: true # makes Prometheus the default datasource.
+    editable: false
+
+  - name: Jaeger # datasource configuration for request traversal and tracing visualization
+    uid: jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    editable: false

@@ -1,0 +1,123 @@
+using Microsoft.EntityFrameworkCore;
+using PaymentReconciliation.Modules.Orders.Domain;
+using PaymentReconciliation.Modules.Payments.Contracts;
+using PaymentReconciliation.Modules.Payments.Domain;
+using PaymentReconciliation.Persistence.Abstractions;
+using PaymentReconciliation.SharedKernel.Abstractions;
+using PaymentReconciliation.SharedKernel.Cqrs;
+using PaymentReconciliation.SharedKernel.Results;
+
+namespace PaymentReconciliation.Modules.Payments.Application;
+
+public sealed record GetPaymentsQuery(
+    int Page = 1,
+    int PageSize = 25,
+    string? Status = null,
+    string? Provider = null,
+    string? Search = null,
+    Guid? OrderId = null) : IQuery<PagedResult<PaymentListItemDto>>;
+
+public sealed class GetPaymentsHandler(IAppDbContext dbContext)
+    : IQueryHandler<GetPaymentsQuery, PagedResult<PaymentListItemDto>>
+{
+    public async Task<Result<PagedResult<PaymentListItemDto>>> Handle(
+        GetPaymentsQuery query,
+        CancellationToken cancellationToken)
+    {
+        var page = query.Page < 1 ? 1 : query.Page;
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+
+        var payments = dbContext.Set<Payment>().AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(query.Status)
+            && Enum.TryParse<PaymentStatus>(query.Status, ignoreCase: true, out var status))
+        {
+            payments = payments.Where(payment => payment.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Provider))
+        {
+            var provider = query.Provider.Trim().ToLowerInvariant();
+            payments = payments.Where(payment => payment.Provider == provider);
+        }
+
+        if (query.OrderId is { } orderId)
+        {
+            payments = payments.Where(payment => payment.OrderId == orderId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim().ToLowerInvariant();
+            payments = payments.Where(payment =>
+                payment.ProviderPaymentId.ToLower().Contains(search)
+                || (payment.CustomerName != null && payment.CustomerName.ToLower().Contains(search))
+                || (payment.CustomerReference != null && payment.CustomerReference.ToLower().Contains(search))
+                || (payment.Reference != null && payment.Reference.ToLower().Contains(search)));
+        }
+
+        var totalCount = await payments.CountAsync(cancellationToken);
+
+        var orders = dbContext.Set<Order>().AsNoTracking();
+
+        var items = await payments
+            .OrderByDescending(payment => payment.ReceivedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .GroupJoin(
+                orders,
+                payment => payment.OrderId,
+                order => (Guid?)order.Id,
+                (payment, matchedOrders) => new { Payment = payment, Orders = matchedOrders })
+            .SelectMany(
+                pair => pair.Orders.DefaultIfEmpty(),
+                (pair, order) => new PaymentListItemDto(
+                    pair.Payment.Id,
+                    pair.Payment.Provider,
+                    pair.Payment.ProviderPaymentId,
+                    pair.Payment.OrderId,
+                    order == null ? null : order.OrderNumber,
+                    pair.Payment.Amount,
+                    pair.Payment.RefundedAmount,
+                    pair.Payment.Currency,
+                    pair.Payment.Status.ToString(),
+                    pair.Payment.CustomerName,
+                    pair.Payment.CustomerReference,
+                    pair.Payment.Reference,
+                    pair.Payment.ReceivedAt))
+            .ToListAsync(cancellationToken);
+
+        return Result.Success(PagedResult<PaymentListItemDto>.Create(items, page, pageSize, totalCount));
+    }
+}
+
+public sealed record GetPaymentByIdQuery(Guid PaymentId) : IQuery<PaymentDto>;
+
+public sealed class GetPaymentByIdHandler(IAppDbContext dbContext)
+    : IQueryHandler<GetPaymentByIdQuery, PaymentDto>
+{
+    public async Task<Result<PaymentDto>> Handle(GetPaymentByIdQuery query, CancellationToken cancellationToken)
+    {
+        var payment = await dbContext.Set<Payment>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.Id == query.PaymentId, cancellationToken);
+
+        if (payment is null)
+        {
+            return Result.Failure<PaymentDto>(
+                Error.NotFound("payment.not_found", $"Payment {query.PaymentId} was not found."));
+        }
+
+        string? orderNumber = null;
+        if (payment.OrderId is { } orderId)
+        {
+            orderNumber = await dbContext.Set<Order>()
+                .AsNoTracking()
+                .Where(order => order.Id == orderId)
+                .Select(order => order.OrderNumber)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return Result.Success(payment.ToDto(orderNumber));
+    }
+}

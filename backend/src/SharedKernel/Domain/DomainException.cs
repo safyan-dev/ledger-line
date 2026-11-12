@@ -1,0 +1,13 @@
+namespace PaymentReconciliation.SharedKernel.Domain;
+
+public sealed class DomainException(string message) : Exception(message);
+
+public sealed class NotFoundException(string code, string message) : Exception(message)
+{
+    public string Code { get; } = code;
+}
+
+public sealed class ConflictException(string code, string message) : Exception(message)
+{
+    public string Code { get; } = code;
+}

@@ -1,0 +1,103 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: ledgerline-postgres
+    environment:
+      POSTGRES_DB: payment_reconciliation
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_reconciliation"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: dpage/pgadmin4:9.19
+    container_name: ledgerline-pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ledgerline.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DISABLE_POSTFIX: "true"
+      PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+
+  # Jaeger is a distributed tracing system that helps you the request flow. 
+  # It visualizes the request traversal and helps you find bottlenecks.
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: ledgerline-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+
+  # The API sends metrics and traces to localhost:4317.
+  # middle, the collector converts metrics into Prometheus format on 8889 and forwards traces to Jaeger.
+  # converts metrics into Prometheus format on 8889 and forwards traces to Jaeger.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: ledgerline-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    depends_on:
+      - jaeger
+    ports:
+      - "4317:4317" # API send OLTP traces to the collector over gRPC
+      - "4318:4318" # API send OLTP traces to the collector over HTTP
+      - "8889:8889" # Prometheus metrics endpoint
+    volumes: #:ro means the container can only read your config file, not modify it.
+      - ./docker/otel/otel-collector-config.yml:/etc/otelcol/config.yaml:ro
+    
+  # the time-series database for metrics.
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ledgerline-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    depends_on:
+      - otel-collector #scrapts the collector after every 5s
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus # keeps metric history when the container restarts.
+
+  # dashboard UI for visualizing metrics and traces.
+  # Prometheus and Jaeger automatically from the provisioning folder.
+  # loads ledgerline-observability.json automatically.
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ledgerline-grafana
+    depends_on:
+      - prometheus
+      - jaeger
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/ledgerline-observability.json
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana # keeps users/dashboards/settings across restarts.
+
+volumes:
+  postgres-data:
+  pgadmin-data:
+  prometheus-data:
+  grafana-data:

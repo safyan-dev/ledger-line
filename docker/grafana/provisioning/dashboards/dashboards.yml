@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Ledgerline
+    orgId: 1
+    folder: Ledgerline # dashboard appears under the Ledgerline folder automatically.
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards # host folder is mounted from, load every dashboard JSON found in this container folder.

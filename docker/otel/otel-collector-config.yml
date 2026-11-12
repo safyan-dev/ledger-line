@@ -1,0 +1,37 @@
+receivers:
+  otlp:
+    protocols: # collector receives data from your API. gRPC is what the API uses by default.
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter: # protects the collector from using too much memory.
+    check_interval: 1s
+    limit_mib: 256
+  batch: # groups data before exporting it, so it is more efficient.
+    timeout: 5s
+    send_batch_size: 1024
+
+# exposes collected metrics for Prometheus to scrape.
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_constant_labels:
+      included: ["*"]
+  otlp_grpc/jaeger: # sends traces to the Jaeger container.
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines: # routing table: traces go to Jaeger, metrics go to Prometheus.
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
