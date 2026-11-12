@@ -21,3 +21,9 @@ dist-ssr/
 
 ## Logs
 *.log
+
+## Local-only directories
+commandcode/
+.commandcode/
+artifacts/
+scripts/
