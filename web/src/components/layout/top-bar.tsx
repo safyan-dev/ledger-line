@@ -25,11 +25,12 @@ import {
 } from '@/components/ui/command'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { BrandMark, SidebarNav } from '@/components/layout/app-sidebar'
+import { BrandMark } from '@/components/brand/brand-mark'
+import { SidebarNav } from '@/components/layout/app-sidebar'
 import { initials } from '@/lib/format'
 
 const pages = [
-  { label: 'Dashboard', to: '/', icon: LayoutDashboard },
+  { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
   { label: 'Orders', to: '/orders', icon: ShoppingCart },
   { label: 'Payments', to: '/payments', icon: CreditCard },
   { label: 'Reconciliation', to: '/reconciliation', icon: LayoutDashboard },
@@ -39,6 +40,7 @@ const pages = [
 
 const sectionLabels: Record<string, string> = {
   '': 'Dashboard',
+  dashboard: 'Dashboard',
   orders: 'Orders',
   payments: 'Payments',
   reconciliation: 'Reconciliation',
@@ -60,7 +62,7 @@ function Breadcrumbs() {
 
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-xs">
-      <Link to="/" className="shrink-0 text-muted-foreground transition-colors hover:text-foreground">
+      <Link to="/dashboard" className="shrink-0 text-muted-foreground transition-colors hover:text-foreground">
         Ledgerline
       </Link>
       <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" aria-hidden />
@@ -192,7 +194,7 @@ export function TopBar() {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            Portfolio build. Seeded data, no authentication. Read the README to wire a real provider.
+            Reconciliation runs on signed provider webhooks. Contact your workspace administrator for provider setup or access.
           </TooltipContent>
         </Tooltip>
 

@@ -1,3 +1,5 @@
+import { clearSession, loadSession, saveSession, type AuthSession } from '@/lib/session'
+import type { AuthResponse, AuthUser } from '@/lib/auth-api'
 import type { ProblemDetails } from '@/types/api'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api'
@@ -30,14 +32,67 @@ export function toQueryString(params: Record<string, QueryValue>): string {
   return query ? `?${query}` : ''
 }
 
+function buildHeaders(init: RequestInit | undefined, session: AuthSession | null): Headers {
+  const headers = new Headers(init?.headers)
+
+  if (init?.body && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json')
+  }
+
+  if (session) {
+    headers.set('Authorization', `Bearer ${session.accessToken}`)
+    if (session.tenantSlug) {
+      headers.set('X-Tenant-Slug', session.tenantSlug)
+    }
+  }
+
+  return headers
+}
+
+function send(path: string, init: RequestInit | undefined, session: AuthSession | null): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, { ...init, headers: buildHeaders(init, session) })
+}
+
+async function refreshSession(session: AuthSession): Promise<AuthSession | null> {
+  try {
+    const response = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: session.refreshToken }),
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    const body = (await response.json()) as AuthResponse
+    const next: AuthSession = {
+      accessToken: body.accessToken,
+      refreshToken: body.refreshToken,
+      tenantSlug: session.tenantSlug,
+      user: (body.user ?? session.user) as AuthUser,
+    }
+    saveSession(next)
+    return next
+  } catch {
+    return null
+  }
+}
+
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.body ? { 'content-type': 'application/json' } : {}),
-      ...init?.headers,
-    },
-  })
+  let session = loadSession()
+  let response = await send(path, init, session)
+
+  if (response.status === 401 && session && !path.startsWith('/auth/')) {
+    const refreshed = await refreshSession(session)
+    if (!refreshed) {
+      clearSession()
+      throw new ApiError('Your session has expired. Sign in again.', 401, 'auth.session_expired')
+    }
+
+    session = refreshed
+    response = await send(path, init, session)
+  }
 
   if (!response.ok) {
     let problem: ProblemDetails | undefined

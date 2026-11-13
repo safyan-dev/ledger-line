@@ -76,8 +76,8 @@ export function RefundDialog({
           <DialogTitle>Refund payment</DialogTitle>
           <DialogDescription>
             {paymentLabel ? `${paymentLabel}. ` : ''}
-            Manual refunds are recorded as succeeded and the order allocation is reversed. No provider refund API is
-            called in this build.
+            Manual refunds are recorded as succeeded and the order allocation is reversed. Provider refunds are
+            handled by your finance team outside Ledgerline.
           </DialogDescription>
         </DialogHeader>
 

@@ -138,3 +138,9 @@
     @apply tracking-tight;
   }
 }
+
+@keyframes public-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}

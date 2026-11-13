@@ -6,14 +6,14 @@ import {
   ScrollText,
   ShoppingCart,
   Webhook,
-  WalletCards,
 } from 'lucide-react'
+import { BrandMark } from '@/components/brand/brand-mark'
 import { cn } from '@/lib/utils'
 
 const navGroups = [
   {
     label: 'Overview',
-    items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }],
+    items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true }],
   },
   {
     label: 'Operations',
@@ -73,20 +73,6 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-export function BrandMark() {
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-        <WalletCards className="size-4" aria-hidden />
-      </div>
-      <div className="leading-none">
-        <p className="text-[15px] font-semibold tracking-tight text-foreground">Ledgerline</p>
-        <p className="mt-1 text-[11px] font-medium text-muted-foreground">Payment reconciliation</p>
-      </div>
-    </div>
-  )
-}
-
 export function AppSidebar() {
   return (
     <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
@@ -98,10 +84,10 @@ export function AppSidebar() {
       </div>
       <div className="border-t border-sidebar-border p-3">
         <div className="rounded-lg border border-sidebar-border bg-background px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Environment</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Workspace</p>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="size-1.5 rounded-full bg-success" aria-hidden />
-            <p className="text-xs font-medium text-foreground">Demo · local Postgres</p>
+            <p className="text-xs font-medium text-foreground">Active</p>
           </div>
         </div>
       </div>

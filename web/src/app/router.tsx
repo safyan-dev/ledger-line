@@ -1,8 +1,10 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { createBrowserRouter, Link, RouterProvider, useRouteError } from 'react-router-dom'
+import { createBrowserRouter, Link, Navigate, RouterProvider, useRouteError } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { publicSiteRoutes } from '@/public-site/routes'
+import { useSession } from '@/lib/session'
 
 const DashboardPage = lazy(() =>
   import('@/features/dashboard/dashboard-page').then((module) => ({ default: module.DashboardPage })),
@@ -48,6 +50,16 @@ function withSuspense(element: ReactNode) {
   return <Suspense fallback={<PageSkeleton />}>{element}</Suspense>
 }
 
+function RequireSession({ children }: { children: ReactNode }) {
+  const session = useSession()
+
+  if (!session) {
+    return <Navigate to="/sign-in" replace />
+  }
+
+  return <>{children}</>
+}
+
 function RouteError() {
   const error = useRouteError()
   const message = error instanceof Error ? error.message : 'The page could not be rendered.'
@@ -58,7 +70,7 @@ function RouteError() {
       <h1 className="text-2xl font-semibold tracking-tight">This screen failed to load</h1>
       <p className="text-sm text-muted-foreground">{message}</p>
       <Button asChild>
-        <Link to="/">Back to dashboard</Link>
+        <Link to="/">Back to home</Link>
       </Button>
     </div>
   )
@@ -66,36 +78,40 @@ function RouteError() {
 
 function NotFoundPage() {
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">404</p>
       <h1 className="text-2xl font-semibold tracking-tight">Page not found</h1>
       <p className="max-w-sm text-sm text-muted-foreground">
-        The link may be stale. Use the sidebar or the search palette to find the record you need.
+        The link may be stale. Use the navigation to find the page you need.
       </p>
       <Button asChild>
-        <Link to="/">Back to dashboard</Link>
+        <Link to="/">Back to home</Link>
       </Button>
     </div>
   )
 }
 
 const router = createBrowserRouter([
+  ...publicSiteRoutes,
   {
-    path: '/',
-    element: <AppShell />,
+    element: (
+      <RequireSession>
+        <AppShell />
+      </RequireSession>
+    ),
     errorElement: <RouteError />,
     children: [
-      { index: true, element: withSuspense(<DashboardPage />) },
-      { path: 'orders', element: withSuspense(<OrdersPage />) },
-      { path: 'orders/:orderId', element: withSuspense(<OrderDetailPage />) },
-      { path: 'payments', element: withSuspense(<PaymentsPage />) },
-      { path: 'payments/:paymentId', element: withSuspense(<PaymentDetailPage />) },
-      { path: 'webhooks', element: withSuspense(<WebhooksPage />) },
-      { path: 'reconciliation', element: withSuspense(<ReconciliationPage />) },
-      { path: 'audit', element: withSuspense(<AuditPage />) },
-      { path: '*', element: <NotFoundPage /> },
+      { path: '/dashboard', element: withSuspense(<DashboardPage />) },
+      { path: '/orders', element: withSuspense(<OrdersPage />) },
+      { path: '/orders/:orderId', element: withSuspense(<OrderDetailPage />) },
+      { path: '/payments', element: withSuspense(<PaymentsPage />) },
+      { path: '/payments/:paymentId', element: withSuspense(<PaymentDetailPage />) },
+      { path: '/webhooks', element: withSuspense(<WebhooksPage />) },
+      { path: '/reconciliation', element: withSuspense(<ReconciliationPage />) },
+      { path: '/audit', element: withSuspense(<AuditPage />) },
     ],
   },
+  { path: '*', element: <NotFoundPage /> },
 ])
 
 export function AppRouter() {
