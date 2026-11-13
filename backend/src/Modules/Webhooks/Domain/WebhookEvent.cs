@@ -1,4 +1,5 @@
 using PaymentReconciliation.Modules.Webhooks.Contracts.Events;
+using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Domain;
 
 namespace PaymentReconciliation.Modules.Webhooks.Domain;
@@ -14,7 +15,7 @@ public enum WebhookStatus
     Conflict
 }
 
-public sealed class WebhookEvent : AggregateRoot
+public sealed class WebhookEvent : AggregateRoot, ITenantOwned
 {
     private WebhookEvent()
     {
@@ -43,6 +44,8 @@ public sealed class WebhookEvent : AggregateRoot
     }
 
     public string Provider { get; private set; } = string.Empty;
+
+    public Guid TenantId { get; private set; }
 
     public string ProviderEventId { get; private set; } = string.Empty;
 
@@ -79,7 +82,8 @@ public sealed class WebhookEvent : AggregateRoot
         string payload,
         string? signature,
         DateTimeOffset receivedAt,
-        string? payloadHash = null)
+        string? payloadHash = null,
+        Guid? tenantId = null)
     {
         if (string.IsNullOrWhiteSpace(provider))
         {
@@ -99,7 +103,10 @@ public sealed class WebhookEvent : AggregateRoot
             payload,
             signature,
             payloadHash ?? string.Empty,
-            receivedAt);
+            receivedAt)
+        {
+            TenantId = tenantId ?? Guid.Empty
+        };
 
         webhookEvent.Raise(new WebhookEventReceived(
             webhookEvent.Id,

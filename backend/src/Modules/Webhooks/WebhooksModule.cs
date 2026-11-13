@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PaymentReconciliation.Modules.Webhooks.Application;
+using PaymentReconciliation.Modules.Webhooks.Contracts;
 using PaymentReconciliation.Modules.Webhooks.Domain;
 using PaymentReconciliation.Modules.Webhooks.Infrastructure;
 using PaymentReconciliation.SharedKernel.Cqrs;
@@ -17,6 +18,7 @@ public static class WebhooksModule
         services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
         services.AddScoped<IWebhookSignatureVerifier, HmacWebhookSignatureVerifier>();
         services.AddSingleton<IWebhookPayloadParser, JsonWebhookPayloadParser>();
+        services.AddScoped<IWebhookReporting, WebhookReporting>();
 
         services.Configure<WebhookIngestionOptions>(configuration.GetSection("Webhooks:Ingestion"));
         services.AddSingleton<IWebhookIngressQueue, WebhookIngressQueue>();

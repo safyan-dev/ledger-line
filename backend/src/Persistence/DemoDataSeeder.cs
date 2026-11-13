@@ -1,27 +1,44 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using PaymentReconciliation.Modules.Auditing.Domain;
+using PaymentReconciliation.Modules.Identity.Domain;
 using PaymentReconciliation.Modules.Orders.Domain;
 using PaymentReconciliation.Modules.Payments.Domain;
 using PaymentReconciliation.Modules.Reconciliation.Domain;
+using PaymentReconciliation.Modules.Tenancy;
+using PaymentReconciliation.Modules.Tenancy.Domain;
 using PaymentReconciliation.Modules.Webhooks.Domain;
 using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Domain;
 
 namespace PaymentReconciliation.Persistence;
 
-public sealed class DemoDataSeeder(AppDbContext dbContext)
+public sealed class DemoDataSeeder(
+    AppDbContext dbContext,
+    UserManager<ApplicationUser> userManager,
+    IConfiguration configuration)
 {
     private static readonly Guid AveryId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid SystemActorId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
+        var demoTenant = await EnsureDemoTenantAsync(cancellationToken);
+        dbContext.TenantContext.Set(new TenantContextSnapshot(
+            demoTenant.Id,
+            demoTenant.Slug,
+            AveryId,
+            TenantRole.Owner.ToString(),
+            false));
+
         if (await dbContext.Set<Order>().AnyAsync(cancellationToken))
         {
             return;
         }
 
         var now = DateTimeOffset.UtcNow;
+        var tenantId = demoTenant.Id;
         var averyActor = new AuditActor(AveryId, "Avery Chen", "Operations");
         var systemActor = AuditActor.System;
 
@@ -31,27 +48,27 @@ public sealed class DemoDataSeeder(AppDbContext dbContext)
 
         var northwind = Order.Create(
             "ORD-2026-0001", "Northwind Traders", "NW-5512", "Q4 platform licence",
-            new Money(1250m, "USD"), averyActor, DaysAgo(now, 12));
+            new Money(1250m, "USD"), averyActor, DaysAgo(now, 12), tenantId);
 
         var acme = Order.Create(
             "ORD-2026-0002", "Acme Industries", "ACME-77", "Annual support renewal",
-            new Money(899.99m, "USD"), averyActor, DaysAgo(now, 9));
+            new Money(899.99m, "USD"), averyActor, DaysAgo(now, 9), tenantId);
 
         var globex = Order.Create(
             "ORD-2026-0003", "Globex Corporation", "GLX-14", "Hardware maintenance",
-            new Money(320m, "USD"), averyActor, DaysAgo(now, 6));
+            new Money(320m, "USD"), averyActor, DaysAgo(now, 6), tenantId);
 
         var initech = Order.Create(
             "ORD-2026-0004", "Initech", "INI-02", "Consulting hours",
-            new Money(74.50m, "USD"), averyActor, DaysAgo(now, 4));
+            new Money(74.50m, "USD"), averyActor, DaysAgo(now, 4), tenantId);
 
         var umbrella = Order.Create(
             "ORD-2026-0005", "Umbrella Health", "UMB-91", "Compliance audit package",
-            new Money(2400m, "USD"), averyActor, DaysAgo(now, 3));
+            new Money(2400m, "USD"), averyActor, DaysAgo(now, 3), tenantId);
 
         var soylent = Order.Create(
             "ORD-2026-0006", "Soylent Foods", "SOY-33", "Pilot subscription",
-            new Money(615.25m, "USD"), averyActor, DaysAgo(now, 2));
+            new Money(615.25m, "USD"), averyActor, DaysAgo(now, 2), tenantId);
 
         soylent.Cancel("Customer withdrew the purchase order.", averyActor);
 
@@ -79,7 +96,8 @@ public sealed class DemoDataSeeder(AppDbContext dbContext)
                 reference,
                 receivedAt,
                 matchedOrder is null ? systemActor : averyActor,
-                receivedAt);
+                receivedAt,
+                tenantId: tenantId);
 
             if (matchedOrder is not null)
             {
@@ -104,7 +122,8 @@ public sealed class DemoDataSeeder(AppDbContext dbContext)
                 reason,
                 null,
                 matchedOrder is null ? systemActor : averyActor,
-                receivedAt.AddMinutes(2)));
+                receivedAt.AddMinutes(2),
+                tenantId: tenantId));
 
             return payment;
         }
@@ -199,7 +218,8 @@ public sealed class DemoDataSeeder(AppDbContext dbContext)
                 eventType,
                 payload,
                 $"sha256=seed-{providerEventId}",
-                receivedAt);
+                receivedAt,
+                tenantId: tenantId);
 
             switch (status)
             {
@@ -233,27 +253,78 @@ public sealed class DemoDataSeeder(AppDbContext dbContext)
 
         dbContext.Set<AuditLog>().AddRange(
             AuditLog.Create(averyActor, "order.created", "orders", "Order", northwind.Id,
-                "Order ORD-2026-0001 created for Northwind Traders (USD 1,250.00).", null, DaysAgo(now, 12)),
+                "Order ORD-2026-0001 created for Northwind Traders (USD 1,250.00).", null, DaysAgo(now, 12), tenantId: tenantId),
             AuditLog.Create(averyActor, "order.created", "orders", "Order", acme.Id,
-                "Order ORD-2026-0002 created for Acme Industries (USD 899.99).", null, DaysAgo(now, 9)),
+                "Order ORD-2026-0002 created for Acme Industries (USD 899.99).", null, DaysAgo(now, 9), tenantId: tenantId),
             AuditLog.Create(systemActor, "payment.recorded", "payments", "Payment", p3.Id,
-                "Payment pay_stripe_2001 recorded from stripe (USD 400.00).", null, DaysAgo(now, 9, 11)),
+                "Payment pay_stripe_2001 recorded from stripe (USD 400.00).", null, DaysAgo(now, 9, 11), tenantId: tenantId),
             AuditLog.Create(averyActor, "reconciliation.completed", "reconciliation", "ReconciliationRecord", p3.Id,
-                "Reconciliation finished with outcome PartiallyMatched (USD 400.00).", null, DaysAgo(now, 9, 11)),
+                "Reconciliation finished with outcome PartiallyMatched (USD 400.00).", null, DaysAgo(now, 9, 11), tenantId: tenantId),
             AuditLog.Create(averyActor, "order.cancelled", "orders", "Order", soylent.Id,
-                "Order ORD-2026-0006 cancelled. Reason: Customer withdrew the purchase order.", null, DaysAgo(now, 2, 9)),
+                "Order ORD-2026-0006 cancelled. Reason: Customer withdrew the purchase order.", null, DaysAgo(now, 2, 9), tenantId: tenantId),
             AuditLog.Create(systemActor, "reconciliation.unmatched", "reconciliation", "ReconciliationRecord", p9.Id,
-                "Reconciliation finished with outcome Unmatched (USD 615.25).", null, DaysAgo(now, 2, 13)),
+                "Reconciliation finished with outcome Unmatched (USD 615.25).", null, DaysAgo(now, 2, 13), tenantId: tenantId),
             AuditLog.Create(averyActor, "reconciliation.manually_matched", "reconciliation", "ReconciliationRecord", p10.Id,
-                "Reconciliation finished with outcome ManuallyMatched (USD 96.75).", null, DaysAgo(now, 3, 17)),
+                "Reconciliation finished with outcome ManuallyMatched (USD 96.75).", null, DaysAgo(now, 3, 17), tenantId: tenantId),
             AuditLog.Create(systemActor, "webhook.failed", "webhooks", "WebhookEvent", w10.Id,
-                "Webhook evt_mock_1011 from mock failed: Signature verification failed.", null, DaysAgo(now, 1, 9)),
+                "Webhook evt_mock_1011 from mock failed: Signature verification failed.", null, DaysAgo(now, 1, 9), tenantId: tenantId),
             AuditLog.Create(systemActor, "webhook.processed", "webhooks", "WebhookEvent", w12.Id,
-                "Webhook evt_mock_1013 from mock processed into a payment.", null, DaysAgo(now, 0, 8)),
+                "Webhook evt_mock_1013 from mock processed into a payment.", null, DaysAgo(now, 0, 8), tenantId: tenantId),
             AuditLog.Create(systemActor, "payment.recorded", "payments", "Payment", p14.Id,
-                "Payment manual_9f4a2c recorded from manual (USD 120.00).", null, DaysAgo(now, 0, 10)));
+                "Payment manual_9f4a2c recorded from manual (USD 120.00).", null, DaysAgo(now, 0, 10), tenantId: tenantId));
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<Tenant> EnsureDemoTenantAsync(CancellationToken cancellationToken)
+    {
+        var tenant = await dbContext.Set<Tenant>()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(candidate => candidate.Slug == TenantDefaults.DemoSlug, cancellationToken);
+
+        if (tenant is null)
+        {
+            tenant = Tenant.Create(TenantDefaults.DemoName, TenantDefaults.DemoSlug);
+            dbContext.Set<Tenant>().Add(tenant);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var user = await userManager.FindByEmailAsync("avery.chen@ledgerline.local");
+        if (user is null)
+        {
+            user = new ApplicationUser
+            {
+                Id = AveryId,
+                UserName = "avery.chen@ledgerline.local",
+                Email = "avery.chen@ledgerline.local",
+                EmailConfirmed = true,
+                DisplayName = "Avery Chen",
+                Status = UserStatus.Active,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+
+            var password = configuration["Demo:Password"] ?? "Demo123!ChangeMe";
+            var createResult = await userManager.CreateAsync(user, password);
+            if (!createResult.Succeeded)
+            {
+                var details = string.Join("; ", createResult.Errors.Select(error => error.Description));
+                throw new InvalidOperationException($"Could not create the demo user: {details}");
+            }
+        }
+
+        var membership = await dbContext.Set<TenantUser>()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(
+                candidate => candidate.TenantId == tenant.Id && candidate.UserId == user.Id,
+                cancellationToken);
+
+        if (membership is null)
+        {
+            dbContext.Set<TenantUser>().Add(TenantUser.Create(tenant.Id, user.Id, TenantRole.Owner));
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return tenant;
     }
 
     private static DateTimeOffset DaysAgo(DateTimeOffset now, int days, int hour = 9)

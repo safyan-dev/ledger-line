@@ -38,4 +38,12 @@ public interface IOrdersFacade
         CancellationToken cancellationToken = default);
 
     Task<Result<OrderCandidate>> GetCandidateAsync(Guid orderId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<Guid, string>> GetOrderNumbersAsync(
+        IEnumerable<Guid> orderIds,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Guid>> FindOrderIdsByNumberAsync(
+        string search,
+        CancellationToken cancellationToken = default);
 }

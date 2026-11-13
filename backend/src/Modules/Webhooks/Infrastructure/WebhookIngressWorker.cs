@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using PaymentReconciliation.Modules.Webhooks.Application;
+using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Cqrs;
 using PaymentReconciliation.SharedKernel.Diagnostics;
 using PaymentReconciliation.SharedKernel.Results;
@@ -116,7 +117,7 @@ public sealed class WebhookIngressWorker(
                 "Simulating a processing failure for webhook {WebhookEventId}.",
                 webhookEventId);
 
-            await MarkFailedAsync(webhookEventId, "simulated_processing_failure", cancellationToken);
+            await MarkFailedAsync(envelope.TenantId, webhookEventId, "simulated_processing_failure", cancellationToken);
             RecordProcessingDuration(processingStartedAt, envelope.Provider, "simulated_failure", activity);
             return;
         }
@@ -124,6 +125,8 @@ public sealed class WebhookIngressWorker(
         try
         {
             using var processScope = scopeFactory.CreateScope();
+            var tenantContext = processScope.ServiceProvider.GetRequiredService<ITenantContext>();
+            tenantContext.Set(new TenantContextSnapshot(envelope.TenantId, string.Empty, null, null, false));
             var dispatcher = processScope.ServiceProvider.GetRequiredService<IDispatcher>();
 
             var result = await dispatcher.SendAsync(
@@ -138,7 +141,7 @@ public sealed class WebhookIngressWorker(
                     result.Error!.Code,
                     result.Error.Message);
 
-                await MarkFailedAsync(webhookEventId, result.Error.Message, cancellationToken);
+                await MarkFailedAsync(envelope.TenantId, webhookEventId, result.Error.Message, cancellationToken);
                 RecordProcessingDuration(processingStartedAt, envelope.Provider, "failure", activity);
                 activity?.SetStatus(ActivityStatusCode.Error, result.Error.Message);
                 return;
@@ -157,6 +160,7 @@ public sealed class WebhookIngressWorker(
                 webhookEventId);
 
             await MarkConflictAsync(
+                envelope.TenantId,
                 webhookEventId,
                 "A concurrent request already created this provider payment.",
                 cancellationToken);
@@ -167,7 +171,7 @@ public sealed class WebhookIngressWorker(
         catch (Exception exception)
         {
             logger.LogError(exception, "Unhandled error while processing webhook {WebhookEventId}.", webhookEventId);
-            await MarkFailedAsync(webhookEventId, "processing_error", cancellationToken);
+            await MarkFailedAsync(envelope.TenantId, webhookEventId, "processing_error", cancellationToken);
             RecordProcessingDuration(processingStartedAt, envelope.Provider, "failure", activity);
             activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
         }
@@ -187,11 +191,17 @@ public sealed class WebhookIngressWorker(
         activity?.SetTag("webhook.outcome", outcome);
     }
 
-    private async Task MarkFailedAsync(Guid webhookEventId, string reason, CancellationToken cancellationToken)
+    private async Task MarkFailedAsync(
+        Guid tenantId,
+        Guid webhookEventId,
+        string reason,
+        CancellationToken cancellationToken)
     {
         try
         {
             using var scope = scopeFactory.CreateScope();
+            scope.ServiceProvider.GetRequiredService<ITenantContext>()
+                .Set(new TenantContextSnapshot(tenantId, string.Empty, null, null, false));
             var dispatcher = scope.ServiceProvider.GetRequiredService<IDispatcher>();
             await dispatcher.SendAsync(new FailWebhookEventCommand(webhookEventId, reason), cancellationToken);
         }
@@ -201,11 +211,17 @@ public sealed class WebhookIngressWorker(
         }
     }
 
-    private async Task MarkConflictAsync(Guid webhookEventId, string reason, CancellationToken cancellationToken)
+    private async Task MarkConflictAsync(
+        Guid tenantId,
+        Guid webhookEventId,
+        string reason,
+        CancellationToken cancellationToken)
     {
         try
         {
             using var scope = scopeFactory.CreateScope();
+            scope.ServiceProvider.GetRequiredService<ITenantContext>()
+                .Set(new TenantContextSnapshot(tenantId, string.Empty, null, null, false));
             var dispatcher = scope.ServiceProvider.GetRequiredService<IDispatcher>();
             await dispatcher.SendAsync(new MarkWebhookConflictCommand(webhookEventId, reason), cancellationToken);
         }

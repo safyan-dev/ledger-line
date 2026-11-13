@@ -142,6 +142,36 @@ public sealed class OrdersFacade(IOrderRepository repository, IAppDbContext dbCo
             : Result.Success(candidate);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetOrderNumbersAsync(
+        IEnumerable<Guid> orderIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = orderIds.Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        return await dbContext.Set<Order>()
+            .AsNoTracking()
+            .Where(order => ids.Contains(order.Id))
+            .Select(order => new { order.Id, order.OrderNumber })
+            .ToDictionaryAsync(order => order.Id, order => order.OrderNumber, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Guid>> FindOrderIdsByNumberAsync(
+        string search,
+        CancellationToken cancellationToken = default)
+    {
+        var term = search.Trim().ToLowerInvariant();
+
+        return await dbContext.Set<Order>()
+            .AsNoTracking()
+            .Where(order => order.OrderNumber.ToLower().Contains(term))
+            .Select(order => order.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     private IQueryable<Order> CandidateOrders()
         => dbContext.Set<Order>()
             .AsNoTracking()

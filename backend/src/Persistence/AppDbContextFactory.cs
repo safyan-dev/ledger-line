@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using PaymentReconciliation.Persistence.Abstractions;
+using PaymentReconciliation.SharedKernel.Abstractions;
 
 namespace PaymentReconciliation.Persistence;
 
@@ -12,6 +14,6 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
             .UseSnakeCaseNamingConvention()
             .Options;
 
-        return new AppDbContext(options);
+        return new AppDbContext(options, new TenantContext(), new TenantBoundaryBypass());
     }
 }

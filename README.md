@@ -78,12 +78,78 @@ order by o.created_at desc;
 
 ## Seeded demo
 
-- Actor: **Avery Chen** (Operations, `avery.chen@ledgerline.local`) — also the `ICurrentUser` implementation. There is no authentication yet.
+- Tenant: **demo** (`demo` slug, `tenancy.tenants`).
+- Owner: **Avery Chen** (`avery.chen@ledgerline.local`), an ASP.NET Core Identity user with an Owner `TenantUser` membership.
+- Local demo password: `Demo123!ChangeMe` from `Demo:Password` in `appsettings.Development.json`. Change it outside local development.
 - 6 orders across every status (pending, partial, paid, overpaid, cancelled).
 - 14 payments, including unmatched ones for the review queue.
 - 12 webhook events (`mock` and `stripe`) with processed, failed and ignored outcomes.
 - Reconciliation attempts for every payment, plus one manual match.
 - Audit rows for the recent business actions.
+
+All seeded business rows belong to the demo tenant.
+
+## Authentication and tenancy
+
+Authentication and tenancy are separate modules:
+
+- **Identity** owns credentials, sessions, tokens, password reset and the `/api/auth/*` endpoints. It knows nothing about tenants.
+- **Tenancy** owns tenants, memberships, tenant resolution and (later) plans and subscriptions. It depends on Identity, never the other way round.
+
+The JWT identifies a **user only** (`sub`, `email`, `display_name`, `platform_admin`). It carries no tenant claim, so one token works on every tenant the user belongs to.
+
+```bash
+curl -s -X POST localhost:5080/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"avery.chen@ledgerline.local","password":"Demo123!ChangeMe"}'
+```
+
+Tenant APIs require a JWT **and** a resolvable tenant. Health checks, `POST /api/webhooks/{provider}`, `/api/auth/*` and `/api/tenants/register` are anonymous.
+
+| Route | Module | Purpose |
+|---|---|---|
+| `POST /api/auth/register` | Identity | Create a user + tokens |
+| `POST /api/auth/login` | Identity | Email + password → tokens |
+| `POST /api/auth/refresh` | Identity | Rotate refresh token |
+| `POST /api/auth/logout` | Identity | Revoke refresh token |
+| `GET /api/auth/me` | Identity | Current user |
+| `POST /api/auth/change-password` | Identity | Change password, revokes sessions |
+| `POST /api/auth/forgot-password` | Identity | Always `200`; dev response includes the reset token |
+| `POST /api/auth/reset-password` | Identity | Consume reset token, revokes sessions |
+| `POST /api/tenants/register` | Tenancy | Create tenant + owner membership + tokens |
+| `GET /api/tenants/mine` | Tenancy | Current user's memberships |
+
+Plans, features and limits are database-backed and seeded idempotently at startup. New tenants get Free by default; a selected Growth/Business plan is stored as a simulated activation with `paymentConfirmed = false` because no payment is collected. Subscription changes write history and audit rows; an hourly worker expires due subscriptions without deleting tenant data.
+
+Tenant resolution runs per request:
+
+1. The tenant subdomain (`acme.localhost`) is resolved to a tenant. In Development only, `X-Tenant-Slug` is accepted as a fallback for tooling.
+2. The server loads the `TenantUser` membership for the authenticated user and rejects non-members with `403`.
+3. An unknown subdomain is `404`; a suspended or canceled tenant is `403`.
+4. Tenant ids in request bodies or query strings are ignored.
+5. No `/api/auth/switch-tenant` endpoint exists any more: switching tenants is a navigation, not a token exchange.
+
+Webhook ingress resolves tenant from the subdomain (or, in Development only, `X-Tenant-Slug`); the payload cannot choose a tenant.
+
+Isolation is enforced twice:
+
+- EF Core global query filters on `Order`, `Payment`, `Refund`, `WebhookEvent`, `ReconciliationRecord`, and `AuditLog`.
+- PostgreSQL `tenant_id` foreign keys and composite `(tenant_id, …)` relationships, so cross-tenant references fail at the database.
+
+New tenant-owned rows are stamped with the server-resolved tenant and cannot be moved to another tenant.
+
+### Tests
+
+```bash
+cd backend
+dotnet test tests/PaymentReconciliation.Tests/PaymentReconciliation.Tests.csproj
+```
+
+Stage 1 covers unauthenticated access, login/refresh/logout, cross-tenant read and write attempts, host/token mismatch, unknown tenants, non-members, forged tenant ids, duplicate slugs, tenant switching, and existing order/payment behavior under tenancy. Tests use a PostgreSQL Testcontainer.
+
+### Not in this stage
+
+Plans, features, entitlements, usage limits, subscriptions, tenant settings/team management, platform administration, and frontend auth screens are later stages.
 
 ## Trying the webhook pipeline
 
@@ -198,6 +264,9 @@ A k6 harness lives under [`perf/`](./perf/README.md). It uses a dedicated Postgr
 
 | Module | Owns | Public surface |
 |---|---|---|
+| Identity | ASP.NET Core Identity users, refresh tokens | auth contracts |
+| Tenancy | Tenant, TenantUser, memberships, JWT token issue, tenant resolution | auth + tenant DTOs |
+|---|---|---|
 | Orders | `Order` aggregate, allocation, status transitions, order numbers | `OrderDto`, `IOrdersFacade`, order events |
 | Payments | `Payment` aggregate, provider idempotency, matched/unmatched transitions | `PaymentDto`, `IPaymentsFacade`, payment events |
 | Webhooks | `WebhookEvent`, signature verification, payload parsing, async ingress + worker | webhook DTOs, ingestion queue, processing commands |
@@ -301,13 +370,23 @@ Refunds are recorded manually (no provider refund API in this build). A refund c
 
 | Method | Route |
 |---|---|
+| POST | `/api/auth/register` · `/api/auth/login` · `/api/auth/refresh` · `/api/auth/logout` · `/api/auth/change-password` · `/api/auth/forgot-password` · `/api/auth/reset-password` |
+| GET | `/api/auth/me` |
+| POST | `/api/tenants/register` — optional `planCode`, defaults to Free |
+| GET | `/api/tenants/mine` |
+| GET/PUT | `/api/tenants/current` — settings; rename is Owner/Admin |
+| GET/POST | `/api/tenants/current/members` · PATCH/DELETE `/api/tenants/current/members/{userId}` |
+| GET/PUT | `/api/tenants/current/subscription` — upgrade is immediate, downgrade is scheduled |
+| POST | `/api/tenants/current/subscription/cancel` · `/renew` (idempotent) |
+| GET | `/api/tenants/current/entitlements` |
+| GET | `/api/plans` (anonymous, database-backed) |
 | GET | `/api/dashboard/summary` |
-| GET/POST | `/api/orders` · supports `status`, `search`, `sort` |
+| GET/POST | `/api/orders` (JWT) · supports `status`, `search`, `sort` |
 | GET | `/api/orders/{id}` |
 | POST | `/api/orders/{id}/cancel` |
 | GET/POST | `/api/payments` |
 | GET | `/api/payments/{id}` |
-| POST | `/api/webhooks/{provider}` |
+| POST | `/api/webhooks/{provider}` (anonymous, HMAC + tenant subdomain) |
 | GET | `/api/webhooks` · `/api/webhooks/{id}` · supports `paymentId` |
 | GET | `/api/reconciliation` · `/api/reconciliation/payment/{paymentId}` · supports `outcome`, `search`, `reason`, `from`, `to` |
 | POST | `/api/reconciliation/manual-match` |
@@ -329,7 +408,8 @@ web/src/
 ├── components/layout/  app shell, sidebar, top bar, page header
 ├── components/data/    data table, status badge, stat card, sparkline, dialogs, detail list…
 ├── features/       dashboard, orders, payments, webhooks, reconciliation, audit
-├── lib/            api client, formatting, status mapping, URL table state
+├── public-site/    public layout, navigation, marketing pages, auth pages
+├── lib/            api client, session, formatting, status mapping, URL table state
 └── types/          DTO types mirroring the API
 ```
 
@@ -338,6 +418,23 @@ web/src/
 - **State:** TanStack Query with query keys per feature; lists are URL-driven (filters, sorting and pagination survive reloads and are shareable).
 - **Errors:** the API client turns `problem+json` into a typed `ApiError`; screens show inline error states with retry and toasts for mutations.
 - **Commands:** filters, dialogs and tables are keyboard reachable; row actions do not hijack keyboard events from nested links/buttons; status is never conveyed by color alone.
+
+### Public site
+
+`web/src/public-site/` is a separate module from the product app, with its own layout, navigation and footer.
+
+| Route | Page |
+|---|---|
+| `/` | Home — hero, problems, capabilities, workflow preview, pricing preview |
+| `/product` · `/how-it-works` · `/pricing` · `/about` · `/demo` | Queued for stage 2; placeholders today |
+| `/sign-in` · `/sign-up` | Real auth, wired to Identity and Tenancy |
+
+- Public routes are anonymous; `/dashboard`, `/orders`, `/payments`, `/webhooks`, `/reconciliation` and `/audit` keep their paths and require a session.
+- The product dashboard moved from `/` to `/dashboard`.
+- The header uses the shared design system primitives (dropdown, sheet, buttons) and adapts to mobile with a slide-over menu.
+- `GET /api/plans` is anonymous and is the only source of plan names, features and limits; nothing is hardcoded in the client.
+- Auth is stored client-side; the API client attaches `Authorization` and `X-Tenant-Slug`, and refreshes once on `401`.
+- `ReconciliationDiagram` animates with CSS only and is disabled under `prefers-reduced-motion`.
 
 ### Scripts
 

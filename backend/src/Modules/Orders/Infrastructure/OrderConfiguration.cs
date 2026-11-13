@@ -16,7 +16,7 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasMaxLength(32)
             .IsRequired();
 
-        builder.HasIndex(order => order.OrderNumber).IsUnique();
+        builder.HasIndex(order => new { order.TenantId, order.OrderNumber }).IsUnique();
 
         builder.Property(order => order.CustomerName)
             .HasMaxLength(160)

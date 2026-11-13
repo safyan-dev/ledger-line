@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using PaymentReconciliation.Modules.Auditing.Application;
+using PaymentReconciliation.Modules.Auditing.Contracts;
 using PaymentReconciliation.Modules.Auditing.Domain;
 using PaymentReconciliation.Modules.Auditing.Infrastructure;
 using PaymentReconciliation.SharedKernel.Cqrs;
@@ -12,6 +13,7 @@ public static class AuditingModule
     {
         services.AddCqrsHandlers(typeof(AuditLog).Assembly);
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IAuditReporting, AuditReporting>();
         return services;
     }
 }

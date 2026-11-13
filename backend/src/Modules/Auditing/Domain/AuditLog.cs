@@ -4,7 +4,7 @@ using PaymentReconciliation.SharedKernel.Abstractions;
 
 namespace PaymentReconciliation.Modules.Auditing.Domain;
 
-public sealed class AuditLog
+public sealed class AuditLog : ITenantOwned
 {
     private AuditLog()
     {
@@ -40,6 +40,8 @@ public sealed class AuditLog
 
     public Guid Id { get; private set; }
 
+    public Guid TenantId { get; private set; }
+
     public Guid? ActorId { get; private set; }
 
     public string ActorName { get; private set; } = "system";
@@ -70,7 +72,8 @@ public sealed class AuditLog
         Guid? entityId,
         string summary,
         object? metadata = null,
-        DateTimeOffset? occurredAt = null)
+        DateTimeOffset? occurredAt = null,
+        Guid? tenantId = null)
     {
         return new AuditLog(
             Guid.NewGuid(),
@@ -84,7 +87,10 @@ public sealed class AuditLog
             summary,
             metadata is null ? null : JsonSerializer.Serialize(metadata, JsonSerializerOptions.Web),
             Activity.Current?.TraceId.ToString(),
-            occurredAt ?? DateTimeOffset.UtcNow);
+            occurredAt ?? DateTimeOffset.UtcNow)
+        {
+            TenantId = tenantId ?? Guid.Empty
+        };
     }
 }
 

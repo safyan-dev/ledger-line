@@ -20,7 +20,7 @@ public sealed class WebhookEventConfiguration : IEntityTypeConfiguration<Webhook
             .HasMaxLength(64)
             .IsRequired();
 
-        builder.HasIndex(webhookEvent => new { webhookEvent.Provider, webhookEvent.ProviderEventId })
+        builder.HasIndex(webhookEvent => new { webhookEvent.TenantId, webhookEvent.Provider, webhookEvent.ProviderEventId })
             .IsUnique();
 
         builder.HasIndex(webhookEvent => webhookEvent.Status);

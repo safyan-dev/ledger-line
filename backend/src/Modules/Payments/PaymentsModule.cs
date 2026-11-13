@@ -15,6 +15,7 @@ public static class PaymentsModule
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IRefundRepository, RefundRepository>();
         services.AddScoped<IPaymentsFacade, PaymentsFacade>();
+        services.AddScoped<IPaymentReporting, PaymentReporting>();
         return services;
     }
 }

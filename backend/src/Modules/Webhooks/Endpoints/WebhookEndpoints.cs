@@ -27,6 +27,7 @@ public static class WebhookEndpoints
             HttpRequest request,
             IWebhookSignatureVerifier signatureVerifier,
             IWebhookIngressQueue ingressQueue,
+            ITenantContext tenantContext,
             IOptions<WebhookIngestionOptions> options,
             ILoggerFactory loggerFactory) =>
         {
@@ -93,6 +94,7 @@ public static class WebhookEndpoints
                 rawBody,
                 signature,
                 DateTimeOffset.UtcNow,
+                tenantContext.TenantId ?? Guid.Empty,
                 SimulateFailure: IsSimulationRequested(request, options.Value),
                 CorrelationId: request.HttpContext.TraceIdentifier);
 
@@ -134,6 +136,7 @@ public static class WebhookEndpoints
 
             return Results.Accepted(value: new WebhookAck(normalizedProvider, envelope.ReceivedAt, Accepted: true));
         })
+        .AllowAnonymous()
         .WithName("IngestWebhook")
         .Produces<WebhookAck>(StatusCodes.Status202Accepted)
         .ProducesProblem(StatusCodes.Status401Unauthorized)

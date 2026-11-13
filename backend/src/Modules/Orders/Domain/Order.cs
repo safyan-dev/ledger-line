@@ -13,7 +13,7 @@ public enum OrderStatus
     Cancelled
 }
 
-public sealed class Order : AggregateRoot
+public sealed class Order : AggregateRoot, ITenantOwned
 {
     private readonly HashSet<Guid> _allocatedPaymentIds = [];
 
@@ -45,6 +45,8 @@ public sealed class Order : AggregateRoot
 
     public string OrderNumber { get; private set; } = string.Empty;
 
+    public Guid TenantId { get; private set; }
+
     public string CustomerName { get; private set; } = string.Empty;
 
     public string? CustomerReference { get; private set; }
@@ -70,7 +72,8 @@ public sealed class Order : AggregateRoot
         string? description,
         Money expectedAmount,
         AuditActor actor,
-        DateTimeOffset? createdAt = null)
+        DateTimeOffset? createdAt = null,
+        Guid? tenantId = null)
     {
         if (string.IsNullOrWhiteSpace(orderNumber))
         {
@@ -94,7 +97,10 @@ public sealed class Order : AggregateRoot
             customerReference?.Trim(),
             description?.Trim(),
             expectedAmount,
-            createdAt ?? DateTimeOffset.UtcNow);
+            createdAt ?? DateTimeOffset.UtcNow)
+        {
+            TenantId = tenantId ?? Guid.Empty
+        };
 
         order.Raise(new OrderCreated(order.Id, order.OrderNumber, order.CustomerName, order.ExpectedAmount, order.Currency, actor));
         return order;

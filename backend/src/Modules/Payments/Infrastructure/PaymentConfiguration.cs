@@ -20,7 +20,7 @@ public sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             .HasMaxLength(64)
             .IsRequired();
 
-        builder.HasIndex(payment => new { payment.Provider, payment.ProviderPaymentId }).IsUnique();
+        builder.HasIndex(payment => new { payment.TenantId, payment.Provider, payment.ProviderPaymentId }).IsUnique();
         builder.HasIndex(payment => payment.OrderId);
         builder.HasIndex(payment => payment.ProviderOrderId);
         builder.HasIndex(payment => payment.Status);

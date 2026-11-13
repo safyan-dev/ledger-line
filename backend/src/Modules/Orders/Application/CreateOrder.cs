@@ -48,7 +48,8 @@ public sealed class CreateOrderValidator : AbstractValidator<CreateOrderCommand>
 public sealed class CreateOrderHandler(
     IOrderRepository repository,
     IAppDbContext dbContext,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    ITenantContext tenantContext)
     : ICommandHandler<CreateOrderCommand, OrderDto>
 {
     public async Task<Result<OrderDto>> Handle(CreateOrderCommand command, CancellationToken cancellationToken)
@@ -100,7 +101,8 @@ public sealed class CreateOrderHandler(
             customerReference,
             command.Description,
             new Money(command.ExpectedAmount, command.Currency),
-            currentUser.Actor);
+            currentUser.Actor,
+            tenantId: tenantContext.TenantId);
 
         repository.Add(order);
 

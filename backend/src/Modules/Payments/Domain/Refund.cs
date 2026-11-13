@@ -10,7 +10,7 @@ public enum RefundStatus
     Failed
 }
 
-public sealed class Refund : AggregateRoot
+public sealed class Refund : AggregateRoot, ITenantOwned
 {
     private Refund()
     {
@@ -43,6 +43,8 @@ public sealed class Refund : AggregateRoot
     }
 
     public Guid PaymentId { get; private set; }
+
+    public Guid TenantId { get; private set; }
 
     public Guid? OrderId { get; private set; }
 
@@ -85,7 +87,10 @@ public sealed class Refund : AggregateRoot
             $"{payment.Provider}_refund_{Guid.NewGuid():N}",
             RefundStatus.Succeeded,
             actor.Name,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow)
+        {
+            TenantId = payment.TenantId
+        };
 
         refund.Raise(new PaymentRefunded(
             refund.Id,

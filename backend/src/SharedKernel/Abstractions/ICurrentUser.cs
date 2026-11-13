@@ -8,6 +8,14 @@ public sealed record AuditActor(Guid? Id, string Name, string Role)
 public interface ICurrentUser
 {
     AuditActor Actor { get; }
+
+    Guid? UserId { get; }
+
+    string? Email { get; }
+
+    bool IsAuthenticated { get; }
+
+    bool IsPlatformAdmin { get; }
 }
 
 public interface IClock

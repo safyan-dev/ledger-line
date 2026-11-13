@@ -25,7 +25,7 @@ public enum MatchStrategy
     None
 }
 
-public sealed class ReconciliationRecord : AggregateRoot
+public sealed class ReconciliationRecord : AggregateRoot, ITenantOwned
 {
     private ReconciliationRecord()
     {
@@ -63,6 +63,8 @@ public sealed class ReconciliationRecord : AggregateRoot
 
     public Guid PaymentId { get; private set; }
 
+    public Guid TenantId { get; private set; }
+
     public Guid? OrderId { get; private set; }
 
     public ReconciliationOutcome Outcome { get; private set; }
@@ -96,7 +98,8 @@ public sealed class ReconciliationRecord : AggregateRoot
         string? reason,
         string? notes,
         AuditActor actor,
-        DateTimeOffset? createdAt = null)
+        DateTimeOffset? createdAt = null,
+        Guid? tenantId = null)
     {
         if (paymentId == Guid.Empty)
         {
@@ -125,7 +128,10 @@ public sealed class ReconciliationRecord : AggregateRoot
             reason,
             notes,
             actor.Name,
-            createdAt ?? DateTimeOffset.UtcNow);
+            createdAt ?? DateTimeOffset.UtcNow)
+        {
+            TenantId = tenantId ?? Guid.Empty
+        };
 
         record.Raise(new ReconciliationCompleted(
             record.Id,

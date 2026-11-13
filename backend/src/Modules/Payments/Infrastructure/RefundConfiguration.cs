@@ -12,6 +12,12 @@ public sealed class RefundConfiguration : IEntityTypeConfiguration<Refund>
 
         builder.HasKey(refund => refund.Id);
 
+        builder.HasOne<Payment>()
+            .WithMany()
+            .HasForeignKey(refund => new { refund.TenantId, refund.PaymentId })
+            .HasPrincipalKey(payment => new { payment.TenantId, payment.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(refund => refund.PaymentId);
         builder.HasIndex(refund => refund.CreatedAt);
 

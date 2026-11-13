@@ -14,6 +14,7 @@ public static class OrdersModule
         services.AddCqrsHandlers(typeof(Order).Assembly);
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IOrdersFacade, OrdersFacade>();
+        services.AddScoped<IOrderReporting, OrderReporting>();
         return services;
     }
 }

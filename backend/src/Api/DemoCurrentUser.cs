@@ -10,4 +10,12 @@ public sealed class DemoCurrentUser : ICurrentUser
         "Operations");
 
     public AuditActor Actor => DemoActor;
+
+    public Guid? UserId => DemoActor.Id;
+
+    public string? Email => "avery.chen@ledgerline.local";
+
+    public bool IsAuthenticated => true;
+
+    public bool IsPlatformAdmin => false;
 }

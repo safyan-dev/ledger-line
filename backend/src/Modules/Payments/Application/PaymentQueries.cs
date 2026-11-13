@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using PaymentReconciliation.Modules.Orders.Domain;
+using PaymentReconciliation.Modules.Orders.Contracts;
 using PaymentReconciliation.Modules.Payments.Contracts;
 using PaymentReconciliation.Modules.Payments.Domain;
 using PaymentReconciliation.Persistence.Abstractions;
@@ -17,7 +17,7 @@ public sealed record GetPaymentsQuery(
     string? Search = null,
     Guid? OrderId = null) : IQuery<PagedResult<PaymentListItemDto>>;
 
-public sealed class GetPaymentsHandler(IAppDbContext dbContext)
+public sealed class GetPaymentsHandler(IAppDbContext dbContext, IOrdersFacade ordersFacade)
     : IQueryHandler<GetPaymentsQuery, PagedResult<PaymentListItemDto>>
 {
     public async Task<Result<PagedResult<PaymentListItemDto>>> Handle(
@@ -58,34 +58,39 @@ public sealed class GetPaymentsHandler(IAppDbContext dbContext)
 
         var totalCount = await payments.CountAsync(cancellationToken);
 
-        var orders = dbContext.Set<Order>().AsNoTracking();
-
         var items = await payments
             .OrderByDescending(payment => payment.ReceivedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .GroupJoin(
-                orders,
-                payment => payment.OrderId,
-                order => (Guid?)order.Id,
-                (payment, matchedOrders) => new { Payment = payment, Orders = matchedOrders })
-            .SelectMany(
-                pair => pair.Orders.DefaultIfEmpty(),
-                (pair, order) => new PaymentListItemDto(
-                    pair.Payment.Id,
-                    pair.Payment.Provider,
-                    pair.Payment.ProviderPaymentId,
-                    pair.Payment.OrderId,
-                    order == null ? null : order.OrderNumber,
-                    pair.Payment.Amount,
-                    pair.Payment.RefundedAmount,
-                    pair.Payment.Currency,
-                    pair.Payment.Status.ToString(),
-                    pair.Payment.CustomerName,
-                    pair.Payment.CustomerReference,
-                    pair.Payment.Reference,
-                    pair.Payment.ReceivedAt))
+            .Select(payment => new PaymentListItemDto(
+                payment.Id,
+                payment.Provider,
+                payment.ProviderPaymentId,
+                payment.OrderId,
+                null,
+                payment.Amount,
+                payment.RefundedAmount,
+                payment.Currency,
+                payment.Status.ToString(),
+                payment.CustomerName,
+                payment.CustomerReference,
+                payment.Reference,
+                payment.ReceivedAt))
             .ToListAsync(cancellationToken);
+
+        var orderIds = items
+            .Where(item => item.OrderId.HasValue)
+            .Select(item => item.OrderId!.Value)
+            .Distinct()
+            .ToList();
+
+        var orderNumbers = await ordersFacade.GetOrderNumbersAsync(orderIds, cancellationToken);
+
+        items = items
+            .Select(item => item.OrderId is { } id && orderNumbers.TryGetValue(id, out var orderNumber)
+                ? item with { OrderNumber = orderNumber }
+                : item)
+            .ToList();
 
         return Result.Success(PagedResult<PaymentListItemDto>.Create(items, page, pageSize, totalCount));
     }
@@ -93,10 +98,12 @@ public sealed class GetPaymentsHandler(IAppDbContext dbContext)
 
 public sealed record GetPaymentByIdQuery(Guid PaymentId) : IQuery<PaymentDto>;
 
-public sealed class GetPaymentByIdHandler(IAppDbContext dbContext)
+public sealed class GetPaymentByIdHandler(IAppDbContext dbContext, IOrdersFacade ordersFacade)
     : IQueryHandler<GetPaymentByIdQuery, PaymentDto>
 {
-    public async Task<Result<PaymentDto>> Handle(GetPaymentByIdQuery query, CancellationToken cancellationToken)
+    public async Task<Result<PaymentDto>> Handle(
+        GetPaymentByIdQuery query,
+        CancellationToken cancellationToken)
     {
         var payment = await dbContext.Set<Payment>()
             .AsNoTracking()
@@ -111,11 +118,8 @@ public sealed class GetPaymentByIdHandler(IAppDbContext dbContext)
         string? orderNumber = null;
         if (payment.OrderId is { } orderId)
         {
-            orderNumber = await dbContext.Set<Order>()
-                .AsNoTracking()
-                .Where(order => order.Id == orderId)
-                .Select(order => order.OrderNumber)
-                .FirstOrDefaultAsync(cancellationToken);
+            var orderNumbers = await ordersFacade.GetOrderNumbersAsync([orderId], cancellationToken);
+            orderNumber = orderNumbers.GetValueOrDefault(orderId);
         }
 
         return Result.Success(payment.ToDto(orderNumber));

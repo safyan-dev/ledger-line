@@ -14,7 +14,7 @@ public sealed class ReconciliationRecordConfiguration : IEntityTypeConfiguration
 
         builder.HasIndex(record => record.PaymentId);
 
-        builder.HasIndex(record => record.PaymentId)
+        builder.HasIndex(record => new { record.TenantId, record.PaymentId })
             .IsUnique()
             .HasFilter("\"outcome\" IN ('Matched', 'PartiallyMatched', 'ManuallyMatched')")
             .HasDatabaseName("ux_reconciliation_records_payment_success");

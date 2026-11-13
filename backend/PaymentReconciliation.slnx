@@ -7,10 +7,15 @@
   </Folder>
   <Folder Name="/src/Modules/">
     <Project Path="src/Modules/Auditing/Auditing.csproj" />
+    <Project Path="src/Modules/Identity/Identity.csproj" />
     <Project Path="src/Modules/Orders/Orders.csproj" />
     <Project Path="src/Modules/Payments/Payments.csproj" />
     <Project Path="src/Modules/Reconciliation/Reconciliation.csproj" />
     <Project Path="src/Modules/Reporting/Reporting.csproj" />
+    <Project Path="src/Modules/Tenancy/Tenancy.csproj" />
     <Project Path="src/Modules/Webhooks/Webhooks.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PaymentReconciliation.Tests/PaymentReconciliation.Tests.csproj" />
   </Folder>
 </Solution>

@@ -14,7 +14,7 @@ public enum PaymentStatus
     Refunded
 }
 
-public sealed class Payment : AggregateRoot
+public sealed class Payment : AggregateRoot, ITenantOwned
 {
     private Payment()
     {
@@ -48,6 +48,8 @@ public sealed class Payment : AggregateRoot
     }
 
     public string Provider { get; private set; } = string.Empty;
+
+    public Guid TenantId { get; private set; }
 
     public string ProviderPaymentId { get; private set; } = string.Empty;
 
@@ -89,7 +91,8 @@ public sealed class Payment : AggregateRoot
         DateTimeOffset receivedAt,
         AuditActor actor,
         DateTimeOffset? createdAt = null,
-        Guid? providerOrderId = null)
+        Guid? providerOrderId = null,
+        Guid? tenantId = null)
     {
         if (string.IsNullOrWhiteSpace(provider))
         {
@@ -116,7 +119,10 @@ public sealed class Payment : AggregateRoot
             customerReference?.Trim(),
             reference?.Trim(),
             receivedAt,
-            createdAt ?? DateTimeOffset.UtcNow);
+            createdAt ?? DateTimeOffset.UtcNow)
+        {
+            TenantId = tenantId ?? Guid.Empty
+        };
 
         payment.Raise(new PaymentRecorded(
             payment.Id,
@@ -144,7 +150,8 @@ public sealed class Payment : AggregateRoot
         string failureReason,
         AuditActor actor,
         Guid? providerOrderId = null,
-        DateTimeOffset? createdAt = null)
+        DateTimeOffset? createdAt = null,
+        Guid? tenantId = null)
     {
         if (string.IsNullOrWhiteSpace(failureReason))
         {
@@ -164,7 +171,8 @@ public sealed class Payment : AggregateRoot
             createdAt ?? DateTimeOffset.UtcNow)
         {
             Status = PaymentStatus.Failed,
-            FailureReason = failureReason.Trim()
+            FailureReason = failureReason.Trim(),
+            TenantId = tenantId ?? Guid.Empty
         };
 
         payment.Raise(new PaymentFailed(payment.Id, payment.FailureReason, actor));

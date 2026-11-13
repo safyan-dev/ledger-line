@@ -37,6 +37,7 @@ public sealed class RecordPaymentValidator : AbstractValidator<RecordPaymentComm
 public sealed class RecordPaymentHandler(
     IPaymentRepository repository,
     ICurrentUser currentUser,
+    ITenantContext tenantContext,
     ILogger<RecordPaymentHandler> logger)
     : ICommandHandler<RecordPaymentCommand, PaymentDto>
 {
@@ -77,7 +78,8 @@ public sealed class RecordPaymentHandler(
             command.CustomerReference,
             command.Reference,
             command.ReceivedAt ?? DateTimeOffset.UtcNow,
-            currentUser.Actor);
+            currentUser.Actor,
+            tenantId: tenantContext.TenantId);
 
         repository.Add(payment);
 

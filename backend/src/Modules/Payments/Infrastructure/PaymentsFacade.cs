@@ -14,8 +14,45 @@ namespace PaymentReconciliation.Modules.Payments.Infrastructure;
 
 public sealed class PaymentsFacade(
     IPaymentRepository repository,
+    IAppDbContext dbContext,
+    ITenantContext tenantContext,
     ILogger<PaymentsFacade> logger) : IPaymentsFacade
 {
+    public async Task<IReadOnlyDictionary<Guid, PaymentReference>> GetPaymentReferencesAsync(
+        IEnumerable<Guid> paymentIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = paymentIds.Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            return new Dictionary<Guid, PaymentReference>();
+        }
+
+        return await dbContext.Set<Payment>()
+            .AsNoTracking()
+            .Where(payment => ids.Contains(payment.Id))
+            .Select(payment => new PaymentReference(
+                payment.Id,
+                payment.ProviderPaymentId,
+                payment.CustomerName))
+            .ToDictionaryAsync(reference => reference.PaymentId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Guid>> FindPaymentIdsAsync(
+        string search,
+        CancellationToken cancellationToken = default)
+    {
+        var term = search.Trim().ToLowerInvariant();
+
+        return await dbContext.Set<Payment>()
+            .AsNoTracking()
+            .Where(payment =>
+                payment.ProviderPaymentId.ToLower().Contains(term)
+                || (payment.CustomerName != null && payment.CustomerName.ToLower().Contains(term)))
+            .Select(payment => payment.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<Result<ProviderPaymentApplyResult>> ApplyProviderPaymentAsync(
         ProviderPaymentData payment,
         bool succeeded,
@@ -60,7 +97,8 @@ public sealed class PaymentsFacade(
                     payment.Reference,
                     payment.ReceivedAt,
                     actor,
-                    providerOrderId: payment.OrderId)
+                    providerOrderId: payment.OrderId,
+                    tenantId: tenantContext.TenantId)
                 : Payment.CreateFailed(
                     payment.Provider,
                     payment.ProviderPaymentId,
@@ -71,7 +109,8 @@ public sealed class PaymentsFacade(
                     payment.ReceivedAt,
                     payment.FailureReason ?? "Provider reported a failed payment.",
                     actor,
-                    payment.OrderId);
+                    payment.OrderId,
+                    tenantId: tenantContext.TenantId);
 
             repository.Add(created);
             activity?.SetTag("payment.id", created.Id);

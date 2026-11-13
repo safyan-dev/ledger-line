@@ -5,6 +5,7 @@ using Npgsql;
 using PaymentReconciliation.Modules.Webhooks.Application;
 using PaymentReconciliation.Modules.Webhooks.Domain;
 using PaymentReconciliation.Persistence.Abstractions;
+using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Results;
 
 namespace PaymentReconciliation.Modules.Webhooks.Infrastructure;
@@ -33,6 +34,8 @@ public sealed class WebhookEventClaimStore(
         using var serviceScope = scopeFactory.CreateScope();
         var dbContext = serviceScope.ServiceProvider.GetRequiredService<IAppDbContext>();
         var unitOfWork = serviceScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var tenantContext = serviceScope.ServiceProvider.GetRequiredService<ITenantContext>();
+        tenantContext.Set(new TenantContextSnapshot(envelope.TenantId, string.Empty, null, null, false));
 
         var webhookEvent = WebhookEvent.Create(
             envelope.Provider,
@@ -41,7 +44,8 @@ public sealed class WebhookEventClaimStore(
             envelope.RawBody,
             envelope.Signature,
             envelope.ReceivedAt,
-            payloadHash);
+            payloadHash,
+            envelope.TenantId);
 
         dbContext.Set<WebhookEvent>().Add(webhookEvent);
 

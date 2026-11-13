@@ -5,6 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="../../SharedKernel/SharedKernel.csproj" />
     <ProjectReference Include="../../Persistence.Abstractions/Persistence.Abstractions.csproj" />
+    <ProjectReference Include="../Tenancy/Tenancy.csproj" />
     <ProjectReference Include="../Orders/Orders.csproj" />
     <ProjectReference Include="../Payments/Payments.csproj" />
     <ProjectReference Include="../Webhooks/Webhooks.csproj" />

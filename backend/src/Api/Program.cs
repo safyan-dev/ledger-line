@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using PaymentReconciliation.Api;
 using PaymentReconciliation.Api.Observability;
+using PaymentReconciliation.Api.Middlewares;
 using PaymentReconciliation.Modules.Auditing;
 using PaymentReconciliation.Modules.Auditing.Endpoints;
 using PaymentReconciliation.Modules.Orders;
@@ -11,8 +12,14 @@ using PaymentReconciliation.Modules.Payments;
 using PaymentReconciliation.Modules.Payments.Endpoints;
 using PaymentReconciliation.Modules.Reconciliation;
 using PaymentReconciliation.Modules.Reconciliation.Endpoints;
+using PaymentReconciliation.Modules.Identity;
+using PaymentReconciliation.Modules.Identity.Endpoints;
+using PaymentReconciliation.Modules.Identity.Infrastructure;
 using PaymentReconciliation.Modules.Reporting;
 using PaymentReconciliation.Modules.Reporting.Endpoints;
+using PaymentReconciliation.Modules.Tenancy;
+using PaymentReconciliation.Modules.Tenancy.Endpoints;
+using PaymentReconciliation.Modules.Tenancy.Infrastructure;
 using PaymentReconciliation.Modules.Webhooks;
 using PaymentReconciliation.Modules.Webhooks.Endpoints;
 using PaymentReconciliation.Persistence;
@@ -39,8 +46,11 @@ builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddCqrsPipeline();
 builder.Services.AddCqrsHandlers(typeof(Program).Assembly);
 
-builder.Services.AddScoped<ICurrentUser, DemoCurrentUser>();
+builder.Services.AddIdentityModule(builder.Configuration);
+builder.Services.AddTenancyModule(builder.Configuration);
 builder.Services.AddScoped<IClock, SystemClock>();
+
+builder.Services.AddAuthorization(options => options.FallbackPolicy = TenancyAuthorization.TenantScoped);
 
 builder.Services.AddOrdersModule();
 builder.Services.AddPaymentsModule();
@@ -62,6 +72,9 @@ var app = builder.Build();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
 app.UseCors("web");
+app.UseAuthentication();
+app.UseTenantResolution();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
@@ -75,23 +88,26 @@ app.MapWebhookEndpoints();
 app.MapReconciliationEndpoints();
 app.MapAuditEndpoints();
 app.MapDashboardEndpoints();
+app.MapAuthEndpoints();
+app.MapTenantEndpoints();
+app.MapPlanEndpoints();
 
 app.MapHealthChecks("/health", new HealthCheckOptions
 {
     ResponseWriter = WriteHealthResponse
-});
+}).AllowAnonymous();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = _ => false,
     ResponseWriter = WriteHealthResponse
-});
+}).AllowAnonymous();
 
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready"),
     ResponseWriter = WriteHealthResponse
-});
+}).AllowAnonymous();
 
 if (app.Environment.IsDevelopment())
 {
@@ -103,6 +119,11 @@ if (app.Environment.IsDevelopment())
     {
         await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().SeedAsync();
     }
+}
+
+await using (var planScope = app.Services.CreateAsyncScope())
+{
+    await planScope.ServiceProvider.GetRequiredService<PlanSeeder>().SeedAsync();
 }
 
 await app.RunAsync();

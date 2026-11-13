@@ -1,11 +1,9 @@
-using Microsoft.EntityFrameworkCore;
-using PaymentReconciliation.Modules.Auditing.Domain;
-using PaymentReconciliation.Modules.Orders.Domain;
-using PaymentReconciliation.Modules.Payments.Domain;
-using PaymentReconciliation.Modules.Reconciliation.Domain;
+using PaymentReconciliation.Modules.Auditing.Contracts;
+using PaymentReconciliation.Modules.Orders.Contracts;
+using PaymentReconciliation.Modules.Payments.Contracts;
+using PaymentReconciliation.Modules.Reconciliation.Contracts;
 using PaymentReconciliation.Modules.Reporting.Contracts;
-using PaymentReconciliation.Modules.Webhooks.Domain;
-using PaymentReconciliation.Persistence.Abstractions;
+using PaymentReconciliation.Modules.Webhooks.Contracts;
 using PaymentReconciliation.SharedKernel.Cqrs;
 using PaymentReconciliation.SharedKernel.Results;
 
@@ -13,14 +11,19 @@ namespace PaymentReconciliation.Modules.Reporting.Application;
 
 public sealed record GetDashboardSummaryQuery : IQuery<DashboardSummaryDto>;
 
-public sealed class GetDashboardSummaryHandler(IAppDbContext dbContext)
+public sealed class GetDashboardSummaryHandler(
+    IOrderReporting orders,
+    IPaymentReporting payments,
+    IReconciliationReporting reconciliation,
+    IWebhookReporting webhooks,
+    IAuditReporting audit)
     : IQueryHandler<GetDashboardSummaryQuery, DashboardSummaryDto>
 {
-    private static readonly ReconciliationOutcome[] MatchedOutcomes =
+    private static readonly HashSet<string> MatchedOutcomes =
     [
-        ReconciliationOutcome.Matched,
-        ReconciliationOutcome.PartiallyMatched,
-        ReconciliationOutcome.ManuallyMatched
+        "Matched",
+        "PartiallyMatched",
+        "ManuallyMatched"
     ];
 
     public async Task<Result<DashboardSummaryDto>> Handle(
@@ -32,101 +35,25 @@ public sealed class GetDashboardSummaryHandler(IAppDbContext dbContext)
         var sevenDaysAgo = now.AddDays(-7);
         var todayStart = new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero);
 
-        var payments = await dbContext.Set<Payment>()
-            .AsNoTracking()
-            .Where(payment => payment.ReceivedAt >= since)
-            .Select(payment => new
-            {
-                payment.Id,
-                payment.Status,
-                payment.Amount,
-                payment.Currency,
-                payment.ReceivedAt,
-                payment.ProviderPaymentId,
-                payment.CustomerName,
-                payment.Reference
-            })
-            .ToListAsync(cancellationToken);
+        var ordersCreated = await orders.CountAsync(cancellationToken);
+        var webhooksReceived = await webhooks.CountAsync(cancellationToken);
+        var paymentSnapshot = await payments.GetSnapshotAsync(since, todayStart, cancellationToken);
+        var reconciliationSnapshot = await reconciliation.GetSnapshotAsync(since, cancellationToken);
+        var recentAudit = await audit.GetRecentAsync(8, cancellationToken);
 
-        var records = await dbContext.Set<ReconciliationRecord>()
-            .AsNoTracking()
-            .Where(record => record.CreatedAt >= since)
-            .Select(record => new
-            {
-                record.Outcome,
-                record.Strategy,
-                record.ActualAmount,
-                record.CreatedAt
-            })
-            .ToListAsync(cancellationToken);
+        var records = reconciliationSnapshot.Recent;
 
-        var webhooksReceived = await dbContext.Set<WebhookEvent>()
-            .AsNoTracking()
-            .CountAsync(cancellationToken);
-
-        var ordersCreated = await dbContext.Set<Order>()
-            .AsNoTracking()
-            .CountAsync(cancellationToken);
-
-        var paymentsRecorded = await dbContext.Set<Payment>()
-            .AsNoTracking()
-            .CountAsync(cancellationToken);
-
-        var successfulPayments = await dbContext.Set<Payment>()
-            .AsNoTracking()
-            .CountAsync(payment => payment.Status != PaymentStatus.Failed, cancellationToken);
-
-        var matchedPayments = await dbContext.Set<Payment>()
-            .AsNoTracking()
-            .CountAsync(payment => payment.Status == PaymentStatus.Matched, cancellationToken);
-
-        var manualMatches = await dbContext.Set<ReconciliationRecord>()
-            .AsNoTracking()
-            .CountAsync(record => record.Strategy == MatchStrategy.Manual, cancellationToken);
-
-        var unmatchedQuery = dbContext.Set<Payment>()
-            .AsNoTracking()
-            .Where(payment => payment.Status == PaymentStatus.Unmatched);
-
-        var pendingReview = await unmatchedQuery.CountAsync(cancellationToken);
-        var unmatchedAmount = await unmatchedQuery.SumAsync(payment => payment.Amount, cancellationToken);
-
-        var reviewQueue = await unmatchedQuery
-            .OrderBy(payment => payment.ReceivedAt)
-            .Take(5)
-            .Select(payment => new ReviewQueueItemDto(
-                payment.Id,
-                payment.ProviderPaymentId,
-                payment.Amount,
-                payment.Currency,
-                payment.CustomerName,
-                payment.Reference,
-                payment.ReceivedAt,
-                0))
-            .ToListAsync(cancellationToken);
-
-        reviewQueue = reviewQueue
-            .Select(item => item with { AgeHours = Math.Max(0, (int)(now - item.ReceivedAt).TotalHours) })
+        var reviewQueue = paymentSnapshot.ReviewQueue
+            .Select(item => new ReviewQueueItemDto(
+                item.Id,
+                item.ProviderPaymentId,
+                item.Amount,
+                item.Currency,
+                item.CustomerName,
+                item.Reference,
+                item.ReceivedAt,
+                Math.Max(0, (int)(now - item.ReceivedAt).TotalHours)))
             .ToList();
-
-        var paymentsToday = await dbContext.Set<Payment>()
-            .AsNoTracking()
-            .CountAsync(payment => payment.ReceivedAt >= todayStart, cancellationToken);
-
-        var recentAudit = await dbContext.Set<AuditLog>()
-            .AsNoTracking()
-            .OrderByDescending(log => log.OccurredAt)
-            .Take(8)
-            .Select(log => new ActivityItemDto(
-                log.Id,
-                log.ActorName,
-                log.Action,
-                log.Module,
-                log.EntityType,
-                log.EntityId,
-                log.Summary,
-                log.OccurredAt))
-            .ToListAsync(cancellationToken);
 
         var records7d = records.Where(record => record.CreatedAt >= sevenDaysAgo).ToList();
         var matched7d = records7d.Count(record => MatchedOutcomes.Contains(record.Outcome));
@@ -138,37 +65,49 @@ public sealed class GetDashboardSummaryHandler(IAppDbContext dbContext)
             .Select(offset => DateOnly.FromDateTime(now.UtcDateTime.Date.AddDays(-13 + offset)))
             .Select(date => new VolumePointDto(
                 date,
-                payments
-                    .Where(payment => payment.Status == PaymentStatus.Matched
+                paymentSnapshot.Recent
+                    .Where(payment => payment.Status == "Matched"
                                       && DateOnly.FromDateTime(payment.ReceivedAt.UtcDateTime.Date) == date)
                     .Sum(payment => payment.Amount),
-                payments
-                    .Where(payment => payment.Status == PaymentStatus.Unmatched
+                paymentSnapshot.Recent
+                    .Where(payment => payment.Status == "Unmatched"
                                       && DateOnly.FromDateTime(payment.ReceivedAt.UtcDateTime.Date) == date)
                     .Sum(payment => payment.Amount),
                 records
-                    .Where(record => record.Strategy == MatchStrategy.Manual
+                    .Where(record => record.Strategy == "Manual"
                                      && DateOnly.FromDateTime(record.CreatedAt.UtcDateTime.Date) == date)
                     .Sum(record => record.ActualAmount)))
+            .ToList();
+
+        var activity = recentAudit
+            .Select(item => new ActivityItemDto(
+                item.Id,
+                item.ActorName,
+                item.Action,
+                item.Module,
+                item.EntityType,
+                item.EntityId,
+                item.Summary,
+                item.OccurredAt))
             .ToList();
 
         var summary = new DashboardSummaryDto(
             new DashboardKpisDto(
                 matchedRate,
-                unmatchedAmount,
-                paymentsToday,
-                pendingReview),
+                paymentSnapshot.UnmatchedAmount,
+                paymentSnapshot.PaymentsToday,
+                paymentSnapshot.PendingReview),
             new DashboardFlowDto(
                 ordersCreated,
                 webhooksReceived,
-                paymentsRecorded,
-                successfulPayments,
-                matchedPayments,
-                pendingReview,
-                manualMatches),
+                paymentSnapshot.TotalRecorded,
+                paymentSnapshot.Successful,
+                paymentSnapshot.Matched,
+                paymentSnapshot.PendingReview,
+                reconciliationSnapshot.ManualMatches),
             volume,
             reviewQueue,
-            recentAudit);
+            activity);
 
         return Result.Success(summary);
     }

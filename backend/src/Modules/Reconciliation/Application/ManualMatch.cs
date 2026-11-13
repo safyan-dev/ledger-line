@@ -26,7 +26,8 @@ public sealed class ManualMatchHandler(
     IPaymentsFacade paymentsFacade,
     IOrdersFacade ordersFacade,
     IReconciliationRepository repository,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    ITenantContext tenantContext)
     : ICommandHandler<ManualMatchCommand, ReconciliationRecordDto>
 {
     public async Task<Result<ReconciliationRecordDto>> Handle(
@@ -93,7 +94,8 @@ public sealed class ManualMatchHandler(
             payment.Currency,
             "Matched manually by an operator.",
             command.Note,
-            actor);
+            actor,
+            tenantId: tenantContext.TenantId);
 
         repository.Add(record);
 
@@ -108,7 +110,8 @@ public sealed class ReRunReconciliationHandler(
     IPaymentsFacade paymentsFacade,
     IOrdersFacade ordersFacade,
     IReconciliationRepository repository,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    ITenantContext tenantContext)
     : ICommandHandler<ReRunReconciliationCommand, ReconciliationRecordDto>
 {
     public async Task<Result<ReconciliationRecordDto>> Handle(
@@ -203,7 +206,8 @@ public sealed class ReRunReconciliationHandler(
             payment.Currency,
             decision.Reason,
             "Matching re-run by an operator.",
-            actor);
+            actor,
+            tenantId: tenantContext.TenantId);
 
         repository.Add(record);
 

@@ -9,10 +9,13 @@
     <ProjectReference Include="../Modules/Reconciliation/Reconciliation.csproj" />
     <ProjectReference Include="../Modules/Auditing/Auditing.csproj" />
     <ProjectReference Include="../Modules/Reporting/Reporting.csproj" />
+    <ProjectReference Include="../Modules/Identity/Identity.csproj" />
+    <ProjectReference Include="../Modules/Tenancy/Tenancy.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />

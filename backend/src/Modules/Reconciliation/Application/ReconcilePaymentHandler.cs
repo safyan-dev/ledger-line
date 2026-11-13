@@ -4,6 +4,7 @@ using PaymentReconciliation.Modules.Payments.Contracts;
 using PaymentReconciliation.Modules.Payments.Contracts.Events;
 using PaymentReconciliation.Modules.Reconciliation.Contracts.Events;
 using PaymentReconciliation.Modules.Reconciliation.Domain;
+using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Diagnostics;
 using PaymentReconciliation.SharedKernel.Events;
 using PaymentReconciliation.SharedKernel.Results;
@@ -16,6 +17,7 @@ public sealed class ReconcilePaymentHandler(
     IOrdersFacade ordersFacade,
     IPaymentsFacade paymentsFacade,
     IReconciliationRepository repository,
+    ITenantContext tenantContext,
     ILogger<ReconcilePaymentHandler> logger)
     : IDomainEventHandler<PaymentRecorded>
 {
@@ -151,7 +153,8 @@ public sealed class ReconcilePaymentHandler(
                 domainEvent.Currency,
                 decision.Reason,
                 notes: null,
-                actor);
+                actor,
+                tenantId: tenantContext.TenantId);
 
             repository.Add(record);
 

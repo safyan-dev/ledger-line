@@ -20,6 +20,7 @@ public sealed record WebhookEnvelope(
     string RawBody,
     string? Signature,
     DateTimeOffset ReceivedAt,
+    Guid TenantId,
     bool SimulateFailure = false,
     string? CorrelationId = null);
 
