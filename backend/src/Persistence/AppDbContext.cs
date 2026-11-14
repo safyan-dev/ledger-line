@@ -10,6 +10,8 @@ using PaymentReconciliation.Modules.Payments.Domain;
 using PaymentReconciliation.Modules.Payments.Infrastructure;
 using PaymentReconciliation.Modules.Reconciliation.Domain;
 using PaymentReconciliation.Modules.Reconciliation.Infrastructure;
+using PaymentReconciliation.Modules.Support.Domain;
+using PaymentReconciliation.Modules.Support.Infrastructure;
 using PaymentReconciliation.Modules.Tenancy.Domain;
 using PaymentReconciliation.Modules.Tenancy.Infrastructure;
 using PaymentReconciliation.Modules.Webhooks.Domain;
@@ -41,6 +43,7 @@ public sealed class AppDbContext(
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ReconciliationRecordConfiguration).Assembly);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AuditLogConfiguration).Assembly);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(TenantConfiguration).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(SupportTicketConfiguration).Assembly);
         modelBuilder.ApplyConfiguration(new ApplicationUserConfiguration());
         modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
 
@@ -85,6 +88,9 @@ public sealed class AppDbContext(
         ConfigureTenantOwned<AuditLog>(modelBuilder);
         ConfigureTenantOwned<Subscription>(modelBuilder);
         ConfigureTenantOwned<SubscriptionHistory>(modelBuilder);
+        ConfigureTenantOwned<TenantInvitation>(modelBuilder);
+        ConfigureTenantOwned<SupportTicket>(modelBuilder, hasAlternateKey: true);
+        ConfigureTenantOwned<SupportTicketMessage>(modelBuilder);
     }
 
     private static void ConfigureTenantOwned<TEntity>(
@@ -166,6 +172,12 @@ public sealed class AppDbContext(
             .HasQueryFilter(subscription => CurrentTenantId != null && subscription.TenantId == CurrentTenantId);
         modelBuilder.Entity<SubscriptionHistory>()
             .HasQueryFilter(history => CurrentTenantId != null && history.TenantId == CurrentTenantId);
+        modelBuilder.Entity<TenantInvitation>()
+            .HasQueryFilter(invitation => CurrentTenantId != null && invitation.TenantId == CurrentTenantId);
+        modelBuilder.Entity<SupportTicket>()
+            .HasQueryFilter(ticket => CurrentTenantId != null && ticket.TenantId == CurrentTenantId);
+        modelBuilder.Entity<SupportTicketMessage>()
+            .HasQueryFilter(message => CurrentTenantId != null && message.TenantId == CurrentTenantId);
     }
 
     private void ApplyTenantBoundary()

@@ -17,6 +17,8 @@ using PaymentReconciliation.Modules.Identity.Endpoints;
 using PaymentReconciliation.Modules.Identity.Infrastructure;
 using PaymentReconciliation.Modules.Reporting;
 using PaymentReconciliation.Modules.Reporting.Endpoints;
+using PaymentReconciliation.Modules.Support;
+using PaymentReconciliation.Modules.Support.Endpoints;
 using PaymentReconciliation.Modules.Tenancy;
 using PaymentReconciliation.Modules.Tenancy.Endpoints;
 using PaymentReconciliation.Modules.Tenancy.Infrastructure;
@@ -52,6 +54,7 @@ builder.Services.AddScoped<IClock, SystemClock>();
 
 builder.Services.AddAuthorization(options => options.FallbackPolicy = TenancyAuthorization.TenantScoped);
 
+builder.Services.AddSupportModule();
 builder.Services.AddOrdersModule();
 builder.Services.AddPaymentsModule();
 builder.Services.AddWebhooksModule(builder.Configuration);
@@ -89,7 +92,12 @@ app.MapReconciliationEndpoints();
 app.MapAuditEndpoints();
 app.MapDashboardEndpoints();
 app.MapAuthEndpoints();
+app.MapAccountEndpoints();
 app.MapTenantEndpoints();
+app.MapInvitationEndpoints();
+app.MapUsageEndpoints();
+app.MapPlatformEndpoints();
+app.MapSupportEndpoints();
 app.MapPlanEndpoints();
 
 app.MapHealthChecks("/health", new HealthCheckOptions
@@ -124,6 +132,12 @@ if (app.Environment.IsDevelopment())
 await using (var planScope = app.Services.CreateAsyncScope())
 {
     await planScope.ServiceProvider.GetRequiredService<PlanSeeder>().SeedAsync();
+}
+
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Database:SeedDemoData", true))
+{
+    await using var demoScope = app.Services.CreateAsyncScope();
+    await demoScope.ServiceProvider.GetRequiredService<DemoDataSeeder>().EnsureDemoSubscriptionAsync();
 }
 
 await app.RunAsync();

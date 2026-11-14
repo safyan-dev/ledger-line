@@ -21,9 +21,12 @@ public sealed class DemoDataSeeder(
 {
     private static readonly Guid AveryId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid SystemActorId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid PlatformOwnerId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
+        await EnsurePlatformAdminAsync(cancellationToken);
+
         var demoTenant = await EnsureDemoTenantAsync(cancellationToken);
         dbContext.TenantContext.Set(new TenantContextSnapshot(
             demoTenant.Id,
@@ -272,6 +275,100 @@ public sealed class DemoDataSeeder(
                 "Webhook evt_mock_1013 from mock processed into a payment.", null, DaysAgo(now, 0, 8), tenantId: tenantId),
             AuditLog.Create(systemActor, "payment.recorded", "payments", "Payment", p14.Id,
                 "Payment manual_9f4a2c recorded from manual (USD 120.00).", null, DaysAgo(now, 0, 10), tenantId: tenantId));
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task EnsurePlatformAdminAsync(CancellationToken cancellationToken)
+    {
+        const string email = "platform@ledgerline.local";
+        var user = await userManager.FindByEmailAsync(email);
+
+        if (user is not null)
+        {
+            if (!user.IsPlatformAdmin)
+            {
+                user.IsPlatformAdmin = true;
+                await userManager.UpdateAsync(user);
+            }
+
+            return;
+        }
+
+        user = new ApplicationUser
+        {
+            Id = PlatformOwnerId,
+            UserName = email,
+            Email = email,
+            EmailConfirmed = true,
+            DisplayName = "Platform Owner",
+            IsPlatformAdmin = true,
+            Status = UserStatus.Active,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        var password = configuration["Demo:PlatformPassword"] ?? "Platform123!ChangeMe";
+        var createResult = await userManager.CreateAsync(user, password);
+        if (!createResult.Succeeded)
+        {
+            var details = string.Join("; ", createResult.Errors.Select(error => error.Description));
+            throw new InvalidOperationException($"Could not create the platform owner: {details}");
+        }
+    }
+
+    public async Task EnsureDemoSubscriptionAsync(CancellationToken cancellationToken = default)
+    {
+        var tenant = await dbContext.Set<Tenant>()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(candidate => candidate.Slug == TenantDefaults.DemoSlug, cancellationToken);
+
+        if (tenant is null)
+        {
+            return;
+        }
+
+        var hasSubscription = await dbContext.Set<Subscription>()
+            .IgnoreQueryFilters()
+            .AnyAsync(candidate => candidate.TenantId == tenant.Id, cancellationToken);
+
+        if (hasSubscription)
+        {
+            return;
+        }
+
+        var plan = await dbContext.Set<Plan>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.Code == "free", cancellationToken);
+
+        if (plan is null)
+        {
+            return;
+        }
+
+        dbContext.TenantContext.Set(new TenantContextSnapshot(
+            tenant.Id,
+            tenant.Slug,
+            AveryId,
+            TenantRole.Owner.ToString(),
+            false));
+
+        var now = DateTimeOffset.UtcNow;
+        var subscription = Subscription.Provision(
+            tenant.Id,
+            plan.Id,
+            plan.IsFree,
+            SubscriptionActivation.Free,
+            now);
+
+        dbContext.Set<Subscription>().Add(subscription);
+        dbContext.Set<SubscriptionHistory>().Add(SubscriptionHistory.Create(
+            tenant.Id,
+            subscription.Id,
+            plan.Id,
+            "subscription.activated",
+            subscription.Status,
+            note: "Free plan assigned to the demo tenant.",
+            occurredAt: now));
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
