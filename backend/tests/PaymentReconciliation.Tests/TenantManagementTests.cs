@@ -73,10 +73,10 @@ public sealed class TenantManagementTests(LedgerlineAppFactory factory)
             HttpMethod.Patch,
             $"/api/tenants/current/members/{member.UserId}",
             owner,
-            JsonContent.Create(new { role = "Admin" })));
+            JsonContent.Create(new { role = "TenantAdmin" })));
         Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
         var changedBody = await changed.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("Admin", changedBody.GetProperty("role").GetString());
+        Assert.Equal("TenantAdmin", changedBody.GetProperty("role").GetString());
 
         var removed = await client.SendAsync(client.Authorized(
             HttpMethod.Delete,
@@ -90,14 +90,14 @@ public sealed class TenantManagementTests(LedgerlineAppFactory factory)
     }
 
     [Fact]
-    public async Task Admin_cannot_manage_owner_and_last_owner_is_protected()
+    public async Task TenantAdmin_cannot_manage_owner_and_last_owner_is_protected()
     {
         var client = factory.CreateClient();
         var owner = await client.RegisterTenantAsync(NewSlug("admA"));
         var admin = await client.RegisterTenantAsync(NewSlug("admB"));
         var third = await client.RegisterTenantAsync(NewSlug("admC"));
 
-        var added = await AddMemberAsync(client, owner, MemberEmail(admin), "Admin");
+        var added = await AddMemberAsync(client, owner, MemberEmail(admin), "TenantAdmin");
         Assert.Equal(HttpStatusCode.OK, added.StatusCode);
 
         var assignOwner = await AddMemberAsync(client, admin, MemberEmail(third), "Owner", owner.TenantSlug);
@@ -171,7 +171,7 @@ public sealed class TenantManagementTests(LedgerlineAppFactory factory)
             HttpMethod.Patch,
             $"/api/tenants/current/members/{member.UserId}",
             owner,
-            JsonContent.Create(new { role = "Admin" })));
+            JsonContent.Create(new { role = "TenantAdmin" })));
         await client.SendAsync(client.Authorized(
             HttpMethod.Delete,
             $"/api/tenants/current/members/{member.UserId}",

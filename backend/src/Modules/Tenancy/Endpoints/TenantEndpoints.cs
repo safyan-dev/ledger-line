@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using PaymentReconciliation.Modules.Tenancy.Application;
+using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Cqrs;
 using PaymentReconciliation.SharedKernel.Web;
@@ -53,15 +54,23 @@ public static class TenantEndpoints
         .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapPut("/current", async (
-            RenameTenantRequest request,
+            UpdateTenantSettingsRequest request,
             IDispatcher dispatcher,
             CancellationToken cancellationToken) =>
         {
-            var result = await dispatcher.SendAsync(new RenameTenantCommand(request.Name), cancellationToken);
+            var result = await dispatcher.SendAsync(
+                new UpdateTenantSettingsCommand(
+                    request.Name,
+                    request.BusinessContactEmail,
+                    request.DefaultCurrency,
+                    request.TimeZone),
+                cancellationToken);
+
             return result.ToHttpResult();
         })
         .RequireAuthorization(AuthorizationPolicies.TenantOwnerOrAdmin)
-        .WithName("RenameTenant")
+        .RequireTenantPermission(TenantPermission.ManageWorkspaceSettings)
+        .WithName("UpdateTenantSettings")
         .Produces<TenantSettingsDto>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status403Forbidden);
@@ -74,6 +83,7 @@ public static class TenantEndpoints
             return result.ToHttpResult();
         })
         .RequireAuthorization(AuthorizationPolicies.TenantMember)
+        .RequireTenantPermission(TenantPermission.ViewTeam)
         .WithName("TenantMembers")
         .Produces<IReadOnlyList<TenantMemberDto>>()
         .ProducesProblem(StatusCodes.Status403Forbidden);
@@ -89,6 +99,7 @@ public static class TenantEndpoints
             return result.ToHttpResult();
         })
         .RequireAuthorization(AuthorizationPolicies.TenantOwnerOrAdmin)
+        .RequireTenantPermission(TenantPermission.ManageTeam)
         .WithName("AddTenantMember")
         .Produces<TenantMemberDto>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -107,6 +118,7 @@ public static class TenantEndpoints
             return result.ToHttpResult();
         })
         .RequireAuthorization(AuthorizationPolicies.TenantOwnerOrAdmin)
+        .RequireTenantPermission(TenantPermission.ManageTeam)
         .WithName("ChangeTenantMemberRole")
         .Produces<TenantMemberDto>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -122,6 +134,7 @@ public static class TenantEndpoints
             return result.ToHttpResult();
         })
         .RequireAuthorization(AuthorizationPolicies.TenantMember)
+        .RequireTenantPermission(TenantPermission.ViewSubscription)
         .WithName("CurrentSubscription")
         .Produces<SubscriptionDto>()
         .ProducesProblem(StatusCodes.Status404NotFound);
@@ -136,7 +149,8 @@ public static class TenantEndpoints
                 cancellationToken);
             return result.ToHttpResult();
         })
-        .RequireAuthorization(AuthorizationPolicies.TenantOwnerOrAdmin)
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .RequireTenantPermission(TenantPermission.ManageSubscription)
         .WithName("ChangeSubscriptionPlan")
         .Produces<SubscriptionDto>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -150,7 +164,8 @@ public static class TenantEndpoints
             var result = await dispatcher.SendAsync(new CancelSubscriptionCommand(), cancellationToken);
             return result.ToHttpResult();
         })
-        .RequireAuthorization(AuthorizationPolicies.TenantOwnerOrAdmin)
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .RequireTenantPermission(TenantPermission.ManageSubscription)
         .WithName("CancelSubscription")
         .Produces<SubscriptionDto>()
         .ProducesProblem(StatusCodes.Status403Forbidden);
@@ -165,12 +180,46 @@ public static class TenantEndpoints
                 cancellationToken);
             return result.ToHttpResult();
         })
-        .RequireAuthorization(AuthorizationPolicies.TenantOwnerOrAdmin)
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .RequireTenantPermission(TenantPermission.ManageSubscription)
         .WithName("RenewSubscription")
         .Produces<SubscriptionDto>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status403Forbidden)
         .ProducesProblem(StatusCodes.Status409Conflict);
+
+        group.MapPost("/current/subscription/reactivate", async (
+            IDispatcher dispatcher,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await dispatcher.SendAsync(new ReactivateSubscriptionCommand(), cancellationToken);
+            return result.ToHttpResult();
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .RequireTenantPermission(TenantPermission.ManageSubscription)
+        .WithName("ReactivateSubscription")
+        .Produces<SubscriptionDto>()
+        .ProducesProblem(StatusCodes.Status403Forbidden)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        group.MapGet("/current/subscription/history", async (
+            int? page,
+            int? pageSize,
+            IDispatcher dispatcher,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await dispatcher.SendAsync(
+                new GetSubscriptionHistoryQuery(page ?? 1, pageSize ?? 25),
+                cancellationToken);
+
+            return result.ToHttpResult();
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantMember)
+        .RequireTenantPermission(TenantPermission.ViewSubscription)
+        .WithName("SubscriptionHistory")
+        .Produces<PagedResult<SubscriptionHistoryDto>>()
+        .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapGet("/current/entitlements", async (
             IDispatcher dispatcher,
@@ -180,6 +229,7 @@ public static class TenantEndpoints
             return result.ToHttpResult();
         })
         .RequireAuthorization(AuthorizationPolicies.TenantMember)
+        .RequireTenantPermission(TenantPermission.ViewUsage)
         .WithName("CurrentEntitlements")
         .Produces<EntitlementsDto>()
         .ProducesProblem(StatusCodes.Status404NotFound);
@@ -193,6 +243,7 @@ public static class TenantEndpoints
             return result.IsFailure ? result.Error!.ToProblemResult() : Results.NoContent();
         })
         .RequireAuthorization(AuthorizationPolicies.TenantOwnerOrAdmin)
+        .RequireTenantPermission(TenantPermission.ManageTeam)
         .WithName("RemoveTenantMember")
         .Produces(StatusCodes.Status204NoContent)
         .ProducesProblem(StatusCodes.Status403Forbidden)

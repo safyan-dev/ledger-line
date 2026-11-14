@@ -1,5 +1,7 @@
+using System.Net.Mail;
 using Microsoft.EntityFrameworkCore;
 using PaymentReconciliation.Modules.Identity.Contracts;
+using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.Modules.Tenancy.Domain;
 using PaymentReconciliation.Persistence.Abstractions;
 using PaymentReconciliation.SharedKernel.Abstractions;
@@ -45,21 +47,29 @@ public sealed class GetCurrentTenantHandler(IAppDbContext dbContext, ITenantCont
             tenant.Status.ToString(),
             tenantContext.Role ?? string.Empty,
             memberCount,
+            tenant.BusinessContactEmail,
+            tenant.DefaultCurrency,
+            tenant.TimeZone,
             tenant.CreatedAt,
             tenant.UpdatedAt));
     }
 }
 
-public sealed record RenameTenantCommand(string Name) : ICommand<TenantSettingsDto>;
+public sealed record UpdateTenantSettingsCommand(
+    string? Name,
+    string? BusinessContactEmail,
+    string? DefaultCurrency,
+    string? TimeZone) : ICommand<TenantSettingsDto>;
 
-public sealed class RenameTenantHandler(
+public sealed class UpdateTenantSettingsHandler(
     IAppDbContext dbContext,
     ITenantContext tenantContext,
-    ICurrentUser currentUser)
-    : ICommandHandler<RenameTenantCommand, TenantSettingsDto>
+    ICurrentUser currentUser,
+    ITenantAuthorizer authorizer)
+    : ICommandHandler<UpdateTenantSettingsCommand, TenantSettingsDto>
 {
     public async Task<Result<TenantSettingsDto>> Handle(
-        RenameTenantCommand command,
+        UpdateTenantSettingsCommand command,
         CancellationToken cancellationToken)
     {
         if (tenantContext.TenantId is not { } tenantId)
@@ -69,12 +79,64 @@ public sealed class RenameTenantHandler(
                 "A tenant context is required."));
         }
 
-        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole)
-            || !TenantRoleRules.CanManageTenant(actorRole))
+        var authorization = authorizer.Require(TenantPermission.ManageWorkspaceSettings);
+        if (authorization.IsFailure)
         {
-            return Result.Failure<TenantSettingsDto>(Error.Forbidden(
-                "tenant.forbidden",
-                "Only an owner or admin can change tenant settings."));
+            return Result.Failure<TenantSettingsDto>(authorization.Error!);
+        }
+
+        if (command.Name is null
+            && command.BusinessContactEmail is null
+            && command.DefaultCurrency is null
+            && command.TimeZone is null)
+        {
+            return Result.Failure<TenantSettingsDto>(Error.Validation(
+                "tenant.no_settings",
+                "At least one workspace setting must be provided."));
+        }
+
+        if (command.Name is not null
+            && (string.IsNullOrWhiteSpace(command.Name) || command.Name.Trim().Length > 160))
+        {
+            return Result.Failure<TenantSettingsDto>(Error.Validation(
+                "tenant.invalid_name",
+                "Workspace name must be between 1 and 160 characters."));
+        }
+
+        if (command.BusinessContactEmail is not null)
+        {
+            var email = command.BusinessContactEmail.Trim();
+            if (email.Length > 0
+                && (email.Length > 320
+                    || !MailAddress.TryCreate(email, out var address)
+                    || !string.Equals(address.Address, email, StringComparison.OrdinalIgnoreCase)))
+            {
+                return Result.Failure<TenantSettingsDto>(Error.Validation(
+                    "tenant.invalid_contact_email",
+                    "Business contact email is invalid."));
+            }
+        }
+
+        if (command.DefaultCurrency is not null)
+        {
+            var currency = command.DefaultCurrency.Trim();
+            if (currency.Length != 3 || !currency.All(char.IsLetter))
+            {
+                return Result.Failure<TenantSettingsDto>(Error.Validation(
+                    "tenant.invalid_currency",
+                    "Default currency must be a three-letter ISO code."));
+            }
+        }
+
+        if (command.TimeZone is not null)
+        {
+            var timeZone = command.TimeZone.Trim();
+            if (timeZone.Length == 0 || !TimeZoneInfo.TryFindSystemTimeZoneById(timeZone, out _))
+            {
+                return Result.Failure<TenantSettingsDto>(Error.Validation(
+                    "tenant.invalid_time_zone",
+                    "Time zone is invalid."));
+            }
         }
 
         var tenant = await dbContext.Set<Tenant>()
@@ -87,7 +149,12 @@ public sealed class RenameTenantHandler(
                 "Tenant was not found."));
         }
 
-        tenant.Rename(command.Name, currentUser.Actor);
+        tenant.UpdateSettings(
+            command.Name,
+            command.BusinessContactEmail,
+            command.DefaultCurrency,
+            command.TimeZone,
+            currentUser.Actor);
 
         var memberCount = await dbContext.Set<TenantUser>()
             .CountAsync(membership => membership.TenantId == tenantId, cancellationToken);
@@ -99,6 +166,9 @@ public sealed class RenameTenantHandler(
             tenant.Status.ToString(),
             tenantContext.Role ?? string.Empty,
             memberCount,
+            tenant.BusinessContactEmail,
+            tenant.DefaultCurrency,
+            tenant.TimeZone,
             tenant.CreatedAt,
             tenant.UpdatedAt));
     }
@@ -109,7 +179,8 @@ public sealed record GetTenantMembersQuery : IQuery<IReadOnlyList<TenantMemberDt
 public sealed class GetTenantMembersHandler(
     IAppDbContext dbContext,
     ITenantContext tenantContext,
-    IIdentityFacade identity)
+    IIdentityFacade identity,
+    ITenantAuthorizer authorizer)
     : IQueryHandler<GetTenantMembersQuery, IReadOnlyList<TenantMemberDto>>
 {
     public async Task<Result<IReadOnlyList<TenantMemberDto>>> Handle(
@@ -121,6 +192,12 @@ public sealed class GetTenantMembersHandler(
             return Result.Failure<IReadOnlyList<TenantMemberDto>>(Error.Forbidden(
                 "tenant.required",
                 "A tenant context is required."));
+        }
+
+        var authorization = authorizer.Require(TenantPermission.ViewTeam);
+        if (authorization.IsFailure)
+        {
+            return Result.Failure<IReadOnlyList<TenantMemberDto>>(authorization.Error!);
         }
 
         var memberships = await dbContext.Set<TenantUser>()
@@ -158,7 +235,9 @@ public sealed class AddTenantMemberHandler(
     IAppDbContext dbContext,
     ITenantContext tenantContext,
     ICurrentUser currentUser,
-    IIdentityFacade identity)
+    IIdentityFacade identity,
+    ITenantAuthorizer authorizer,
+    IUsageLimitEnforcer usage)
     : ICommandHandler<AddTenantMemberCommand, TenantMemberDto>
 {
     public async Task<Result<TenantMemberDto>> Handle(
@@ -172,19 +251,24 @@ public sealed class AddTenantMemberHandler(
                 "A tenant context is required."));
         }
 
-        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole)
-            || !TenantRoleRules.CanManageTenant(actorRole))
+        var authorization = authorizer.Require(TenantPermission.ManageTeam);
+        if (authorization.IsFailure)
+        {
+            return Result.Failure<TenantMemberDto>(authorization.Error!);
+        }
+
+        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole))
         {
             return Result.Failure<TenantMemberDto>(Error.Forbidden(
-                "tenant.forbidden",
-                "Only an owner or admin can add team members."));
+                "tenant.permission_denied",
+                "Your role is not valid for this tenant."));
         }
 
         if (!TenantRoleParsing.TryParseRole(command.Role, out var role))
         {
             return Result.Failure<TenantMemberDto>(Error.Validation(
                 "tenant.invalid_role",
-                "Role must be Owner, Admin or Finance."));
+                "Role must be Owner, TenantAdmin or Finance."));
         }
 
         if (!TenantRoleRules.CanAssignRole(actorRole, role))
@@ -212,6 +296,12 @@ public sealed class AddTenantMemberHandler(
                 "This user is already a member of the tenant."));
         }
 
+        var limit = await usage.EnsureWithinLimitAsync(UsageMetric.TeamMembers, cancellationToken);
+        if (limit.IsFailure)
+        {
+            return Result.Failure<TenantMemberDto>(limit.Error!);
+        }
+
         var membership = TenantUser.Add(tenantId, user.Value.Id, role, currentUser.Actor);
         dbContext.Set<TenantUser>().Add(membership);
 
@@ -230,7 +320,8 @@ public sealed class ChangeTenantMemberRoleHandler(
     IAppDbContext dbContext,
     ITenantContext tenantContext,
     ICurrentUser currentUser,
-    IIdentityFacade identity)
+    IIdentityFacade identity,
+    ITenantAuthorizer authorizer)
     : ICommandHandler<ChangeTenantMemberRoleCommand, TenantMemberDto>
 {
     public async Task<Result<TenantMemberDto>> Handle(
@@ -244,19 +335,24 @@ public sealed class ChangeTenantMemberRoleHandler(
                 "A tenant context is required."));
         }
 
-        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole)
-            || !TenantRoleRules.CanManageTenant(actorRole))
+        var authorization = authorizer.Require(TenantPermission.ManageTeam);
+        if (authorization.IsFailure)
+        {
+            return Result.Failure<TenantMemberDto>(authorization.Error!);
+        }
+
+        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole))
         {
             return Result.Failure<TenantMemberDto>(Error.Forbidden(
-                "tenant.forbidden",
-                "Only an owner or admin can change member roles."));
+                "tenant.permission_denied",
+                "Your role is not valid for this tenant."));
         }
 
         if (!TenantRoleParsing.TryParseRole(command.Role, out var role))
         {
             return Result.Failure<TenantMemberDto>(Error.Validation(
                 "tenant.invalid_role",
-                "Role must be Owner, Admin or Finance."));
+                "Role must be Owner, TenantAdmin or Finance."));
         }
 
         var membership = await dbContext.Set<TenantUser>()
@@ -319,7 +415,8 @@ public sealed record RemoveTenantMemberCommand(Guid UserId) : ICommand<Guid>;
 public sealed class RemoveTenantMemberHandler(
     IAppDbContext dbContext,
     ITenantContext tenantContext,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    ITenantAuthorizer authorizer)
     : ICommandHandler<RemoveTenantMemberCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(
@@ -333,12 +430,17 @@ public sealed class RemoveTenantMemberHandler(
                 "A tenant context is required."));
         }
 
-        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole)
-            || !TenantRoleRules.CanManageTenant(actorRole))
+        var authorization = authorizer.Require(TenantPermission.ManageTeam);
+        if (authorization.IsFailure)
+        {
+            return Result.Failure<Guid>(authorization.Error!);
+        }
+
+        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole))
         {
             return Result.Failure<Guid>(Error.Forbidden(
-                "tenant.forbidden",
-                "Only an owner or admin can remove team members."));
+                "tenant.permission_denied",
+                "Your role is not valid for this tenant."));
         }
 
         var membership = await dbContext.Set<TenantUser>()
@@ -391,6 +493,11 @@ internal static class TenantRoleParsing
         if (string.IsNullOrEmpty(trimmed))
         {
             return false;
+        }
+
+        if (string.Equals(trimmed, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = nameof(TenantRole.TenantAdmin);
         }
 
         var match = Enum.GetNames<TenantRole>()

@@ -16,7 +16,10 @@ public sealed class TenantResolutionMiddleware(
         "/health",
         "/scalar",
         "/openapi",
-        "/api/auth"
+        "/api/auth",
+        "/api/account",
+        "/api/invitations",
+        "/api/platform"
     ];
 
     private static readonly string[] TenantAgnosticPaths =

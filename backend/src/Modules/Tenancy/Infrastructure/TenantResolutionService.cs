@@ -108,6 +108,27 @@ public sealed class TenantMemberAuthorizationHandler(ITenantContext tenantContex
     }
 }
 
+public sealed class TenantOwnerRequirement : IAuthorizationRequirement;
+
+public sealed class TenantOwnerAuthorizationHandler(ITenantContext tenantContext)
+    : AuthorizationHandler<TenantOwnerRequirement>
+{
+    protected override Task HandleRequirementAsync(
+        AuthorizationHandlerContext context,
+        TenantOwnerRequirement requirement)
+    {
+        if (context.User.Identity?.IsAuthenticated == true
+            && tenantContext.IsResolved
+            && TenantRoleRules.TryParse(tenantContext.Role, out var role)
+            && role == TenantRole.Owner)
+        {
+            context.Succeed(requirement);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
 public sealed class TenantOwnerOrAdminRequirement : IAuthorizationRequirement;
 
 public sealed class TenantOwnerOrAdminAuthorizationHandler(ITenantContext tenantContext)
@@ -119,7 +140,8 @@ public sealed class TenantOwnerOrAdminAuthorizationHandler(ITenantContext tenant
     {
         if (context.User.Identity?.IsAuthenticated == true
             && tenantContext.IsResolved
-            && tenantContext.Role is "Owner" or "Admin")
+            && TenantRoleRules.TryParse(tenantContext.Role, out var role)
+            && role is TenantRole.Owner or TenantRole.TenantAdmin)
         {
             context.Succeed(requirement);
         }

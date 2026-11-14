@@ -1,3 +1,4 @@
+using System.Net.Mail;
 using PaymentReconciliation.Modules.Tenancy.Contracts.Events;
 using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Domain;
@@ -14,21 +15,34 @@ public enum TenantStatus
 public enum TenantRole
 {
     Owner,
-    Admin,
+    TenantAdmin,
     Finance
 }
 
 public static class TenantRoleRules
 {
     public static bool CanManageTenant(TenantRole role)
-        => role is TenantRole.Owner or TenantRole.Admin;
+        => TenantRolePermissions.IsGranted(role, Contracts.TenantPermission.ManageTeam);
 
     public static bool CanAssignRole(TenantRole actorRole, TenantRole targetRole)
         => actorRole == TenantRole.Owner
-           || (actorRole == TenantRole.Admin && targetRole != TenantRole.Owner);
+           || (actorRole == TenantRole.TenantAdmin && targetRole != TenantRole.Owner);
 
     public static bool TryParse(string? value, out TenantRole role)
-        => Enum.TryParse(value, ignoreCase: true, out role);
+    {
+        role = default;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var normalized = string.Equals(value.Trim(), "Admin", StringComparison.OrdinalIgnoreCase)
+            ? nameof(TenantRole.TenantAdmin)
+            : value.Trim();
+
+        return Enum.TryParse(normalized, ignoreCase: true, out role)
+               && Enum.IsDefined(role);
+    }
 }
 
 public sealed class Tenant : AggregateRoot
@@ -52,6 +66,12 @@ public sealed class Tenant : AggregateRoot
     public string Slug { get; private set; } = string.Empty;
 
     public TenantStatus Status { get; private set; }
+
+    public string? BusinessContactEmail { get; private set; }
+
+    public string DefaultCurrency { get; private set; } = "USD";
+
+    public string TimeZone { get; private set; } = "UTC";
 
     public DateTimeOffset CreatedAt { get; private set; }
 
@@ -95,6 +115,84 @@ public sealed class Tenant : AggregateRoot
         Name = trimmed;
         UpdatedAt = DateTimeOffset.UtcNow;
         Raise(new TenantRenamed(Id, Name, actor));
+    }
+
+    public void UpdateSettings(
+        string? name,
+        string? businessContactEmail,
+        string? defaultCurrency,
+        string? timeZone,
+        AuditActor actor)
+    {
+        if (name is not null)
+        {
+            Rename(name, actor);
+        }
+
+        var changed = false;
+
+        if (businessContactEmail is not null)
+        {
+            var trimmed = businessContactEmail.Trim();
+            string? email = trimmed.Length == 0 ? null : trimmed;
+
+            if (email is not null
+                && (email.Length > 320
+                    || !MailAddress.TryCreate(email, out var address)
+                    || !string.Equals(address.Address, email, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new DomainException("Business contact email is invalid.");
+            }
+
+            if (!string.Equals(BusinessContactEmail, email, StringComparison.Ordinal))
+            {
+                BusinessContactEmail = email;
+                changed = true;
+            }
+        }
+
+        if (defaultCurrency is not null)
+        {
+            var currency = defaultCurrency.Trim().ToUpperInvariant();
+
+            if (currency.Length != 3 || !currency.All(char.IsLetter))
+            {
+                throw new DomainException("Default currency must be a three-letter ISO code.");
+            }
+
+            if (!string.Equals(DefaultCurrency, currency, StringComparison.Ordinal))
+            {
+                DefaultCurrency = currency;
+                changed = true;
+            }
+        }
+
+        if (timeZone is not null)
+        {
+            var zone = timeZone.Trim();
+
+            if (!TimeZoneInfo.TryFindSystemTimeZoneById(zone, out _))
+            {
+                throw new DomainException("Time zone is invalid.");
+            }
+
+            if (!string.Equals(TimeZone, zone, StringComparison.Ordinal))
+            {
+                TimeZone = zone;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            UpdatedAt = DateTimeOffset.UtcNow;
+            Raise(new TenantSettingsUpdated(
+                Id,
+                BusinessContactEmail,
+                DefaultCurrency,
+                TimeZone,
+                actor));
+        }
     }
 
     public void Suspend()

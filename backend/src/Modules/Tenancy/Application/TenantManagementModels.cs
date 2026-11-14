@@ -7,6 +7,9 @@ public sealed record TenantSettingsDto(
     string Status,
     string Role,
     int MemberCount,
+    string? BusinessContactEmail,
+    string DefaultCurrency,
+    string TimeZone,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
@@ -17,7 +20,11 @@ public sealed record TenantMemberDto(
     string Role,
     DateTimeOffset JoinedAt);
 
-public sealed record RenameTenantRequest(string Name);
+public sealed record UpdateTenantSettingsRequest(
+    string? Name,
+    string? BusinessContactEmail,
+    string? DefaultCurrency,
+    string? TimeZone);
 
 public sealed record AddTenantMemberRequest(string Email, string Role);
 

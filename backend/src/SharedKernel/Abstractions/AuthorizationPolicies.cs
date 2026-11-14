@@ -8,5 +8,7 @@ public static class AuthorizationPolicies
 
     public const string TenantMember = "TenantMember";
 
+    public const string TenantOwner = "TenantOwner";
+
     public const string TenantOwnerOrAdmin = "TenantOwnerOrAdmin";
 }

@@ -15,6 +15,9 @@ public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.HasIndex(tenant => tenant.Slug).IsUnique();
         builder.Property(tenant => tenant.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.HasIndex(tenant => tenant.Status);
+        builder.Property(tenant => tenant.BusinessContactEmail).HasMaxLength(320);
+        builder.Property(tenant => tenant.DefaultCurrency).HasMaxLength(3).IsRequired().HasDefaultValue("USD");
+        builder.Property(tenant => tenant.TimeZone).HasMaxLength(64).IsRequired().HasDefaultValue("UTC");
         builder.Ignore(tenant => tenant.DomainEvents);
     }
 }
