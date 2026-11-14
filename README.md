@@ -19,7 +19,7 @@ Provider webhook ──▶ Webhook event ──▶ Payment ──▶ Matcher ─
 | Persistence | PostgreSQL 17, EF Core 10, one schema per module, snake_case identifiers |
 | Responses | Result pattern end-to-end (`Result<T>`) mapped to `ProblemDetails` |
 | Client | React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui (New York, slate), TanStack Query, React Router 7 |
-| Testing | Deferred to a follow-up plan (xUnit + Testcontainers is the chosen stack) |
+| Testing | xUnit + Testcontainers (PostgreSQL) |
 
 ## Getting started
 
@@ -79,8 +79,9 @@ order by o.created_at desc;
 ## Seeded demo
 
 - Tenant: **demo** (`demo` slug, `tenancy.tenants`).
-- Owner: **Avery Chen** (`avery.chen@ledgerline.local`), an ASP.NET Core Identity user with an Owner `TenantUser` membership.
-- Local demo password: `Demo123!ChangeMe` from `Demo:Password` in `appsettings.Development.json`. Change it outside local development.
+- Tenant owner: **Avery Chen** (`avery.chen@ledgerline.local`), an ASP.NET Core Identity user with an Owner `TenantUser` membership. Sign in at `demo.localhost:5173` with `Demo123!ChangeMe`.
+- Platform/SaaS owner: **Platform Owner** (`platform@ledgerline.local`), an Identity user with `IsPlatformAdmin = true` and no tenant membership. Sign in at the root domain (no workspace subdomain) with `Platform123!ChangeMe`.
+- Passwords come from `Demo:Password` and `Demo:PlatformPassword` in `appsettings.Development.json`, with the values above as defaults. Change them outside local development.
 - 6 orders across every status (pending, partial, paid, overpaid, cancelled).
 - 14 payments, including unmatched ones for the review queue.
 - 12 webhook events (`mock` and `stripe`) with processed, failed and ignored outcomes.
@@ -93,23 +94,35 @@ All seeded business rows belong to the demo tenant.
 
 Authentication and tenancy are separate modules:
 
-- **Identity** owns credentials, sessions, tokens, password reset and the `/api/auth/*` endpoints. It knows nothing about tenants.
-- **Tenancy** owns tenants, memberships, tenant resolution and (later) plans and subscriptions. It depends on Identity, never the other way round.
+- **Identity** owns credentials, sessions, tokens, password reset and the `/api/auth/*` endpoints. It resolves the requested workspace through a small `ITenantMembershipVerifier` contract implemented by Tenancy; it never references the Tenancy module directly.
+- **Tenancy** owns tenants, memberships, tenant resolution, plans and subscriptions. It depends on Identity, never the other way round.
 
 The JWT identifies a **user only** (`sub`, `email`, `display_name`, `platform_admin`). It carries no tenant claim, so one token works on every tenant the user belongs to.
 
+Login is credential-based and workspace-aware:
+
+- A **platform admin** can sign in without a workspace slug and is routed to `/platform`.
+- A **tenant user** must present the workspace slug. The web client derives it from the subdomain (`demo.localhost`); direct API calls can pass `tenantSlug` in the body. The backend verifies membership in that tenant before issuing tokens.
+- A tenant user signing in without a slug gets `403 auth.tenant_required`; a user signing into a workspace they do not belong to gets `403 auth.tenant_membership_required`.
+
 ```bash
+# Tenant owner: workspace slug required
 curl -s -X POST localhost:5080/api/auth/login \
   -H 'content-type: application/json' \
-  -d '{"email":"avery.chen@ledgerline.local","password":"Demo123!ChangeMe"}'
+  -d '{"email":"avery.chen@ledgerline.local","password":"Demo123!ChangeMe","tenantSlug":"demo"}'
+
+# Platform owner: no workspace slug
+curl -s -X POST localhost:5080/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"platform@ledgerline.local","password":"Platform123!ChangeMe"}'
 ```
 
-Tenant APIs require a JWT **and** a resolvable tenant. Health checks, `POST /api/webhooks/{provider}`, `/api/auth/*` and `/api/tenants/register` are anonymous.
+Tenant APIs require a JWT **and** a resolvable tenant. Health checks, `POST /api/webhooks/{provider}`, `/api/auth/*`, `/api/platform/*` and `/api/tenants/register` are tenant-agnostic; platform endpoints additionally require the `PlatformAdmin` policy.
 
 | Route | Module | Purpose |
 |---|---|---|
 | `POST /api/auth/register` | Identity | Create a user + tokens |
-| `POST /api/auth/login` | Identity | Email + password → tokens |
+| `POST /api/auth/login` | Identity | Email + password + optional `tenantSlug` → tokens; slug is required for tenant users and optional for platform admins |
 | `POST /api/auth/refresh` | Identity | Rotate refresh token |
 | `POST /api/auth/logout` | Identity | Revoke refresh token |
 | `GET /api/auth/me` | Identity | Current user |
@@ -118,8 +131,36 @@ Tenant APIs require a JWT **and** a resolvable tenant. Health checks, `POST /api
 | `POST /api/auth/reset-password` | Identity | Consume reset token, revokes sessions |
 | `POST /api/tenants/register` | Tenancy | Create tenant + owner membership + tokens |
 | `GET /api/tenants/mine` | Tenancy | Current user's memberships |
+| `GET /api/platform/tenants` | Tenancy | Platform admin: list workspaces (no tenant context) |
 
-Plans, features and limits are database-backed and seeded idempotently at startup. New tenants get Free by default; a selected Growth/Business plan is stored as a simulated activation with `paymentConfirmed = false` because no payment is collected. Subscription changes write history and audit rows; an hourly worker expires due subscriptions without deleting tenant data.
+Plans, features and limits are database-backed and seeded idempotently at startup. New tenants get Free by default; a selected Growth/Business plan is stored as a simulated activation with `paymentConfirmed = false` because no payment is collected. Subscription changes write history and audit rows; an hourly worker applies due downgrades and expires due subscriptions without deleting tenant data.
+
+### Roles, team and personal account
+
+Authorization is centralized in `TenantPermission` + `TenantRolePermissions`; endpoints and handlers both enforce it, independently of the frontend.
+
+| Role | Capabilities |
+|---|---|
+| Owner | Full tenant access, team and role management, workspace settings, subscription changes, usage, all business modules, support tickets |
+| TenantAdmin | Team (non-owner) and role management, invitations, workspace settings, read subscription/usage, business modules, support tickets |
+| Finance | Read/run operational modules, read subscription/usage, personal account, support tickets; no team, workspace or subscription changes |
+
+- `POST /api/tenants/current/members` still adds an existing registered user directly; invitations are the email-based path:
+  `POST /api/tenants/current/invitations`, `GET .../invitations`, `POST .../{id}/resend`, `POST .../{id}/revoke`, and `POST /api/invitations/accept`.
+- Invitation tokens are single-use, 7-day, stored only as SHA-256 hashes, and scoped to the tenant in the token. Existing accounts must sign in to accept; unregistered emails create an account during acceptance. Owner invitations are not allowed.
+- Personal account: `GET /api/account/profile`, `PATCH /api/account/profile`, `POST /api/account/change-email`, `POST /api/account/change-email/confirm`; password change, forgot/reset and logout remain under `/api/auth/*`. Email-change and password tokens are single-use and expire after one hour; password changes, email changes and logout revoke refresh tokens. Forgot-password never reveals whether an email exists.
+- Email delivery is a logging sender in this build (recipient/subject only); invitation, reset and email-change tokens are returned in Development responses for testability.
+
+### Usage and limits
+
+`GET /api/usage` reports plan, period and `used / limit / remaining` for orders, payments and active team members, plus included features. `GET /api/usage/features/{key}` checks a feature. Limits are enforced in the backend on order creation, manual payment creation, webhook payment creation, direct member add and invitation acceptance. Enforcement takes a PostgreSQL transaction-scoped advisory lock per tenant/metric, then counts and inserts in the same transaction, so concurrent requests cannot bypass the limit.
+
+A webhook payment over the payments limit is retained as a `Failed` event with a `plan.limit_reached` reason and no payment row; `POST /api/webhooks/{id}/reprocess` retries it after an upgrade or freed capacity. Downgrades and expiry never delete existing rows; they can leave usage above the new limit while blocking new creates.
+
+### Workspace settings and support
+
+- `GET/PUT /api/tenants/current` reads/updates workspace name, business contact email, default currency and time zone (Owner/TenantAdmin).
+- `POST/GET /api/support/tickets`, `GET /api/support/tickets/{id}`, `POST /api/support/tickets/{id}/messages`, `PATCH /api/support/tickets/{id}/status`. All tenant roles can create, view and reply; only the Owner changes ticket status. Status transitions are validated, and tenant isolation is enforced by query filters plus a composite tenant/ticket foreign key.
 
 Tenant resolution runs per request:
 
@@ -145,11 +186,9 @@ cd backend
 dotnet test tests/PaymentReconciliation.Tests/PaymentReconciliation.Tests.csproj
 ```
 
-Stage 1 covers unauthenticated access, login/refresh/logout, cross-tenant read and write attempts, host/token mismatch, unknown tenants, non-members, forged tenant ids, duplicate slugs, tenant switching, and existing order/payment behavior under tenancy. Tests use a PostgreSQL Testcontainer.
+The suite covers unauthenticated access, login/refresh/logout and token rotation, password reset (single use), change-password/email session revocation, the role permission matrix, last-owner protection, invitation creation/accept/resend/revoke/expiry, cross-tenant read and write attempts on every new endpoint, subscription lifecycle (upgrade/downgrade/cancel/reactivate/history), plan-limit enforcement including concurrent order creation and webhook fail/reprocess, workspace settings isolation, and support-ticket isolation. Tests use a PostgreSQL Testcontainer.
 
-### Not in this stage
-
-Plans, features, entitlements, usage limits, subscriptions, tenant settings/team management, platform administration, and frontend auth screens are later stages.
+Platform administration, custom roles, real payment processing and frontend account/team screens are outside this scope.
 
 ## Trying the webhook pipeline
 
@@ -273,6 +312,7 @@ A k6 harness lives under [`perf/`](./perf/README.md). It uses a dedicated Postgr
 | Reconciliation | `ReconciliationRecord`, matcher strategies, manual match, re-run | reconciliation DTOs, reconciliation events |
 | Auditing | `AuditLog`, `Actor`, event subscriptions for every module | audit query DTOs |
 | Reporting | Dashboard read model across schemas | dashboard DTOs |
+| Support | `SupportTicket`, `SupportTicketMessage`, status workflow, tenant-scoped replies | support ticket DTOs |
 
 Each module is a separate project with the same shape:
 
@@ -374,12 +414,18 @@ Refunds are recorded manually (no provider refund API in this build). A refund c
 | GET | `/api/auth/me` |
 | POST | `/api/tenants/register` — optional `planCode`, defaults to Free |
 | GET | `/api/tenants/mine` |
-| GET/PUT | `/api/tenants/current` — settings; rename is Owner/Admin |
+| GET/PUT | `/api/tenants/current` — name, business contact email, default currency, time zone; update is Owner/TenantAdmin |
 | GET/POST | `/api/tenants/current/members` · PATCH/DELETE `/api/tenants/current/members/{userId}` |
+| GET/POST | `/api/tenants/current/invitations` · POST `/api/tenants/current/invitations/{id}/resend` · `/revoke` |
+| POST | `/api/invitations/accept` (anonymous or authenticated) |
 | GET/PUT | `/api/tenants/current/subscription` — upgrade is immediate, downgrade is scheduled |
-| POST | `/api/tenants/current/subscription/cancel` · `/renew` (idempotent) |
-| GET | `/api/tenants/current/entitlements` |
+| POST | `/api/tenants/current/subscription/cancel` · `/renew` (idempotent) · `/reactivate` |
+| GET | `/api/tenants/current/subscription/history` |
+| GET | `/api/tenants/current/entitlements` · `/api/usage` · `/api/usage/features/{featureKey}` |
+| GET/PATCH | `/api/account/profile` · POST `/api/account/change-email` · `/change-email/confirm` |
+| POST/GET | `/api/support/tickets` · GET `/api/support/tickets/{id}` · POST `/{id}/messages` · PATCH `/{id}/status` |
 | GET | `/api/plans` (anonymous, database-backed) |
+| GET | `/api/platform/tenants` (platform admin, no tenant context) |
 | GET | `/api/dashboard/summary` |
 | GET/POST | `/api/orders` (JWT) · supports `status`, `search`, `sort` |
 | GET | `/api/orders/{id}` |
@@ -392,6 +438,7 @@ Refunds are recorded manually (no provider refund API in this build). A refund c
 | POST | `/api/reconciliation/manual-match` |
 | POST | `/api/payments/{id}/link` · `/api/payments/{id}/reconcile` |
 | POST/GET | `/api/payments/{id}/refunds` |
+| POST | `/api/webhooks/{id}/reprocess` — retry a plan-limit-failed event |
 | GET | `/api/audit-logs` |
 | GET | `/health` |
 
@@ -449,10 +496,9 @@ node scripts/simulate-webhooks.mjs --scenario all
 
 ## Deliberate omissions
 
-- **No authentication.** `ICurrentUser` + the seeded `Actor` row are the only seams to replace when adding JWT/roles.
 - **Webhook ingress is a CLI simulator, not a provider UI.** `scripts/simulate-webhooks.mjs` covers the scenarios; there is no browser payload generator.
-- **In-memory ingress queue.** The <5 ms ack is achieved by acknowledging before persistence. A crash can lose queued events; there is no outbox/broker. Stored events stuck in `Received/Processing` are failed by a recovery sweep, but there is no automatic reprocess endpoint.
-- **No xUnit projects yet.** Unit, integration (Testcontainers) and architecture tests are the next plan. Interim guardrails: startup snake_case validation, project references, Result contracts, the E2E simulator (13 scenarios), and the manual checklist below.
+- **In-memory ingress queue.** The <5 ms ack is achieved by acknowledging before persistence. A crash can lose queued events; there is no outbox/broker. Stored events stuck in `Received/Processing` are failed by a recovery sweep. Only plan-limit failures can be reprocessed (`POST /api/webhooks/{id}/reprocess`); there is no general replay endpoint.
+- **No real payment provider.** Plans use manual/simulated activation; no invoices, gateway calls or card data are involved. Email delivery is a logging sender; a real provider can replace `IEmailSender`.
 - **No Kafka/RabbitMQ, no outbox.** In-process events inside the command transaction are sufficient at this scale and keep the failure mode obvious.
 - **No refunds via a payment provider.** Refunds are recorded manually as succeeded (no Stripe refund call, no refund webhooks), and there are no refund approval roles. Partial manual splits, FX conversion and dark mode are also omitted (tokens are in place for dark mode).
 - **No click-to-sort on tables yet.** Lists support server-side filtering and pagination; sorting is a follow-up API/UI addition.
