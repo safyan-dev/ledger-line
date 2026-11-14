@@ -1,8 +1,11 @@
+using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using PaymentReconciliation.Modules.Identity.Contracts;
 using PaymentReconciliation.Modules.Identity.Domain;
 using PaymentReconciliation.Persistence.Abstractions;
 using PaymentReconciliation.SharedKernel.Abstractions;
@@ -16,7 +19,11 @@ public sealed class AuthService(
     IUnitOfWork unitOfWork,
     IJwtTokenService jwtTokenService,
     IOptions<JwtOptions> jwtOptions,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IEmailSender emailSender,
+    IHostEnvironment environment,
+    ITenantMembershipVerifier tenantMembershipVerifier,
+    ILoginTenantResolver loginTenantResolver)
 {
     private readonly JwtOptions _jwtOptions = jwtOptions.Value;
 
@@ -39,7 +46,21 @@ public sealed class AuthService(
         string displayName,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEmail = email.Trim();
+        if (!TryNormalizeEmail(email, out var normalizedEmail))
+        {
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_email",
+                "A valid email address is required."));
+        }
+
+        var normalizedDisplayName = displayName?.Trim() ?? string.Empty;
+        if (normalizedDisplayName.Length == 0 || normalizedDisplayName.Length > 160)
+        {
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_display_name",
+                "Display name must be between 1 and 160 characters."));
+        }
+
         if (await userManager.FindByEmailAsync(normalizedEmail) is not null)
         {
             return Result.Failure<AuthUserDto>(Error.Conflict(
@@ -53,7 +74,7 @@ public sealed class AuthService(
             UserName = normalizedEmail,
             Email = normalizedEmail,
             EmailConfirmed = true,
-            DisplayName = displayName.Trim(),
+            DisplayName = normalizedDisplayName,
             Status = UserStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -97,7 +118,44 @@ public sealed class AuthService(
             return Result.Failure<AuthResponse>(user.Error!);
         }
 
-        return await IssueTokensAsync(user.Value.Id, cancellationToken);
+        var tenantSlug = NormalizeTenantSlug(request.TenantSlug)
+                         ?? loginTenantResolver.ResolveTenantSlug();
+        TenantLoginDto? tenant = null;
+
+        if (tenantSlug is not null)
+        {
+            var membership = await tenantMembershipVerifier.FindForLoginAsync(
+                user.Value.Id,
+                tenantSlug,
+                cancellationToken);
+
+            if (membership is null)
+            {
+                return Result.Failure<AuthResponse>(Error.Forbidden(
+                    "auth.tenant_membership_required",
+                    "You are not a member of this workspace."));
+            }
+
+            tenant = new TenantLoginDto(
+                membership.TenantId,
+                membership.TenantName,
+                membership.TenantSlug,
+                membership.Role);
+        }
+        else if (!user.Value.IsPlatformAdmin)
+        {
+            return Result.Failure<AuthResponse>(Error.Forbidden(
+                "auth.tenant_required",
+                "Sign in at your workspace subdomain."));
+        }
+
+        var session = await IssueTokensAsync(user.Value.Id, cancellationToken);
+        if (session.IsFailure)
+        {
+            return session;
+        }
+
+        return Result.Success(session.Value with { Tenant = tenant });
     }
 
     public async Task<Result<AuthResponse>> IssueTokensAsync(
@@ -207,6 +265,155 @@ public sealed class AuthService(
         return Result.Success(ToDto(user));
     }
 
+    public async Task<Result<AuthUserDto>> UpdateProfileAsync(
+        UpdateProfileRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (currentUser.UserId is not { } userId)
+        {
+            return Result.Failure<AuthUserDto>(Error.Unauthorized("auth.required", "Authentication is required."));
+        }
+
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is null || user.Status != UserStatus.Active)
+        {
+            return Result.Failure<AuthUserDto>(Error.Unauthorized("auth.invalid_user", "User was not found."));
+        }
+
+        var displayName = request.DisplayName?.Trim() ?? string.Empty;
+        if (displayName.Length == 0 || displayName.Length > 160)
+        {
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_display_name",
+                "Display name must be between 1 and 160 characters."));
+        }
+
+        user.DisplayName = displayName;
+        var updateResult = await userManager.UpdateAsync(user);
+        if (!updateResult.Succeeded)
+        {
+            return Result.Failure<AuthUserDto>(IdentityValidationError(
+                updateResult,
+                "The profile could not be updated."));
+        }
+
+        return Result.Success(ToDto(user));
+    }
+
+    public async Task<Result<ChangeEmailResponse>> RequestEmailChangeAsync(
+        ChangeEmailRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (currentUser.UserId is not { } userId)
+        {
+            return Result.Failure<ChangeEmailResponse>(Error.Unauthorized(
+                "auth.required",
+                "Authentication is required."));
+        }
+
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is null || user.Status != UserStatus.Active)
+        {
+            return Result.Failure<ChangeEmailResponse>(Error.Unauthorized(
+                "auth.invalid_user",
+                "User was not found."));
+        }
+
+        if (!TryNormalizeEmail(request.NewEmail, out var newEmail))
+        {
+            return Result.Failure<ChangeEmailResponse>(Error.Validation(
+                "auth.invalid_email",
+                "A valid email address is required."));
+        }
+
+        if (string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure<ChangeEmailResponse>(Error.Validation(
+                "auth.email_unchanged",
+                "The new email address must be different from the current one."));
+        }
+
+        var existing = await userManager.FindByEmailAsync(newEmail);
+        if (existing is not null && existing.Id != user.Id)
+        {
+            return Result.Failure<ChangeEmailResponse>(Error.Conflict(
+                "auth.email_taken",
+                "An account with this email already exists."));
+        }
+
+        var token = await userManager.GenerateChangeEmailTokenAsync(user, newEmail);
+
+        await emailSender.SendAsync(
+            new EmailMessage(
+                newEmail,
+                "Confirm your email change",
+                $"Use this token to confirm your new email address: {token}"),
+            cancellationToken);
+
+        return Result.Success(new ChangeEmailResponse(
+            environment.IsDevelopment() ? token : null));
+    }
+
+    public async Task<Result<AuthUserDto>> ConfirmEmailChangeAsync(
+        ConfirmEmailChangeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (currentUser.UserId is not { } userId)
+        {
+            return Result.Failure<AuthUserDto>(Error.Unauthorized("auth.required", "Authentication is required."));
+        }
+
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is null || user.Status != UserStatus.Active)
+        {
+            return Result.Failure<AuthUserDto>(Error.Unauthorized("auth.invalid_user", "User was not found."));
+        }
+
+        if (!TryNormalizeEmail(request.NewEmail, out var newEmail))
+        {
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_email",
+                "A valid email address is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Token))
+        {
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_email_token",
+                "The email change token is invalid or has expired."));
+        }
+
+        var changeResult = await userManager.ChangeEmailAsync(user, newEmail, request.Token);
+        if (!changeResult.Succeeded)
+        {
+            if (changeResult.Errors.Any(error =>
+                    error.Code is "DuplicateEmail" or "DuplicateUserName"))
+            {
+                return Result.Failure<AuthUserDto>(Error.Conflict(
+                    "auth.email_taken",
+                    "An account with this email already exists."));
+            }
+
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_email_token",
+                "The email change token is invalid or has expired."));
+        }
+
+        user.UserName = newEmail;
+        user.EmailConfirmed = true;
+
+        var updateResult = await userManager.UpdateAsync(user);
+        if (!updateResult.Succeeded)
+        {
+            return Result.Failure<AuthUserDto>(IdentityValidationError(
+                updateResult,
+                "The email could not be updated."));
+        }
+
+        await RevokeAllAsync(user.Id, cancellationToken);
+        return Result.Success(ToDto(user));
+    }
+
     public async Task<Result> ChangePasswordAsync(
         ChangePasswordRequest request,
         CancellationToken cancellationToken = default)
@@ -217,7 +424,7 @@ public sealed class AuthService(
         }
 
         var user = await userManager.FindByIdAsync(userId.ToString());
-        if (user is null)
+        if (user is null || user.Status != UserStatus.Active)
         {
             return Result.Failure(Error.Unauthorized("auth.invalid_user", "User was not found."));
         }
@@ -247,7 +454,51 @@ public sealed class AuthService(
     }
 
     private static AuthUserDto ToDto(ApplicationUser user)
-        => new(user.Id, user.Email ?? string.Empty, user.DisplayName, user.IsPlatformAdmin);
+        => new(user.Id, user.Email ?? string.Empty, user.DisplayName, user.IsPlatformAdmin, user.EmailConfirmed);
+
+    private static string? NormalizeTenantSlug(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var slug = value.Trim().ToLowerInvariant();
+        if (slug.Length is < 2 or > 40)
+        {
+            return null;
+        }
+
+        if (!slug.All(character => char.IsLetterOrDigit(character) || character == '-'))
+        {
+            return null;
+        }
+
+        return char.IsLetterOrDigit(slug[0]) && char.IsLetterOrDigit(slug[^1]) ? slug : null;
+    }
+
+    private static bool TryNormalizeEmail(string? value, out string email)
+    {
+        email = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var candidate = value.Trim();
+        if (candidate.Length > 320 || !MailAddress.TryCreate(candidate, out var address))
+        {
+            return false;
+        }
+
+        if (!string.Equals(address.Address, candidate, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        email = candidate;
+        return true;
+    }
 
     private static string GenerateRefreshToken()
         => Convert.ToBase64String(RandomNumberGenerator.GetBytes(48))

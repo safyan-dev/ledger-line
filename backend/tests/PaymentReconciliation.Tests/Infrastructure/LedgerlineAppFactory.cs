@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using PaymentReconciliation.Modules.Identity.Domain;
 using PaymentReconciliation.Persistence;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -18,6 +20,35 @@ public sealed class LedgerlineAppFactory : WebApplicationFactory<Program>, IAsyn
         .Build();
 
     public string ConnectionString => _postgres.GetConnectionString();
+
+    public async Task<(string Email, string Password)> CreatePlatformAdminAsync()
+    {
+        const string password = "PlatformPass123!";
+        var email = $"platform-{Guid.NewGuid():N}@example.test";
+
+        using var scope = Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = email,
+            Email = email,
+            EmailConfirmed = true,
+            DisplayName = "Platform Admin",
+            IsPlatformAdmin = true,
+            Status = UserStatus.Active,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        var result = await userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(
+                $"Could not create the platform admin: {string.Join("; ", result.Errors.Select(error => error.Description))}");
+        }
+
+        return (email, password);
+    }
 
     public async Task InitializeAsync()
     {

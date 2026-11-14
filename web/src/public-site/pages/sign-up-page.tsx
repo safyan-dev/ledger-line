@@ -1,5 +1,6 @@
 import { useState, type ChangeEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiError, errorMessage } from '@/lib/api-client'
 import { registerTenantRequest } from '@/lib/auth-api'
+import { normalizeRole } from '@/lib/roles'
 import { getSelectedPlan, saveSession, type SelectedPlan } from '@/lib/session'
 import { usePageTitle } from '@/lib/use-page-title'
 import { cn } from '@/lib/utils'
@@ -51,6 +53,7 @@ function titleCase(value: string): string {
 export function SignUpPage() {
   usePageTitle('Get started')
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [params] = useSearchParams()
   const [formError, setFormError] = useState<string | null>(null)
   const [slugTouched, setSlugTouched] = useState(false)
@@ -92,10 +95,14 @@ export function SignUpPage() {
         planCode: selectedPlan?.code,
       })
 
+      queryClient.clear()
       saveSession({
         accessToken: response.session.accessToken,
         refreshToken: response.session.refreshToken,
+        tenantId: response.tenant.id,
+        tenantName: response.tenant.name,
         tenantSlug: response.tenant.slug,
+        role: normalizeRole(response.tenant.role),
         user: response.session.user,
       })
 

@@ -23,20 +23,33 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
     }
 
     [Fact]
-    public async Task Login_is_tenant_agnostic()
+    public async Task Tenant_login_requires_a_workspace_slug()
     {
         var client = factory.CreateClient();
-        var session = await client.RegisterTenantAsync($"agnostic-" + Guid.NewGuid().ToString("N")[..10]);
+        var session = await client.RegisterTenantAsync($"subdomain-" + Guid.NewGuid().ToString("N")[..10]);
+        var email = $"owner@{session.TenantSlug}.test";
 
-        var login = await client.PostAsJsonAsync("/api/auth/login", new
+        var withoutSlug = await client.PostAsJsonAsync("/api/auth/login", new
         {
-            email = $"owner@{session.TenantSlug}.test",
+            email,
             password = "TenantPass123!"
         });
 
-        login.EnsureSuccessStatusCode();
-        var body = await login.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.False(body.TryGetProperty("tenant", out _));
+        Assert.Equal(HttpStatusCode.Forbidden, withoutSlug.StatusCode);
+
+        var withSlug = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "TenantPass123!",
+            tenantSlug = session.TenantSlug
+        });
+
+        withSlug.EnsureSuccessStatusCode();
+        var body = await withSlug.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(
+            session.TenantSlug,
+            body.GetProperty("tenant").GetProperty("tenantSlug").GetString());
+        Assert.Equal("Owner", body.GetProperty("tenant").GetProperty("role").GetString());
 
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/orders");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
@@ -167,7 +180,12 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
         });
         Assert.Equal(HttpStatusCode.BadRequest, reuse.StatusCode);
 
-        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password = "ResetPass123!" });
+        var login = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "ResetPass123!",
+            tenantSlug = session.TenantSlug
+        });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
     }
 

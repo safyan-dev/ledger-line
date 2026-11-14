@@ -90,8 +90,8 @@ public sealed class IdentityFacade(
     }
 
     private static IdentityUser ToContract(AuthUserDto user)
-        => new(user.Id, user.Email, user.DisplayName, user.IsPlatformAdmin);
+        => new(user.Id, user.Email, user.DisplayName, user.IsPlatformAdmin, user.EmailConfirmed);
 
     private static IdentityUser ToContract(ApplicationUser user)
-        => new(user.Id, user.Email ?? string.Empty, user.DisplayName, user.IsPlatformAdmin);
+        => new(user.Id, user.Email ?? string.Empty, user.DisplayName, user.IsPlatformAdmin, user.EmailConfirmed);
 }

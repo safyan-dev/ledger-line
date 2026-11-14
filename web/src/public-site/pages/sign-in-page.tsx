@@ -1,15 +1,16 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowRight, CircleAlert, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { ArrowRight, CircleAlert, CircleCheck, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiError, errorMessage } from '@/lib/api-client'
-import { fetchMemberships, loginRequest, sessionFromAuth } from '@/lib/auth-api'
-import { clearSession, saveSession } from '@/lib/session'
+import { loginRequest } from '@/lib/auth-api'
+import { clearSession, saveSession, sessionFromAuth } from '@/lib/session'
 import { usePageTitle } from '@/lib/use-page-title'
 
 const schema = z.object({
@@ -22,6 +23,13 @@ type FormValues = z.infer<typeof schema>
 export function SignInPage() {
   usePageTitle('Sign in')
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [params] = useSearchParams()
+  const redirect = params.get('redirect')
+  const redirectTo = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/dashboard'
+  const passwordChanged = params.get('passwordChanged') === '1'
+  const passwordReset = params.get('passwordReset') === '1'
+  const tenantSlug = tenantSlugFromHost(window.location.hostname)
   const [formError, setFormError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -34,23 +42,42 @@ export function SignInPage() {
     setFormError(null)
 
     try {
-      const response = await loginRequest(values.email, values.password)
-      saveSession(sessionFromAuth(response, null))
+      const response = await loginRequest(values.email, values.password, tenantSlug ?? undefined)
+      queryClient.clear()
 
-      const memberships = await fetchMemberships()
-      const membership = memberships[0]
-      if (!membership) {
-        clearSession()
-        setFormError('This account is not a member of any workspace yet.')
+      if (response.tenant) {
+        saveSession(sessionFromAuth(response, {
+          tenantId: response.tenant.tenantId,
+          name: response.tenant.tenantName,
+          slug: response.tenant.tenantSlug,
+          role: response.tenant.role,
+        }))
+        navigate(redirectTo, { replace: true })
         return
       }
 
-      saveSession(sessionFromAuth(response, membership.slug))
-      navigate('/dashboard', { replace: true })
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        setFormError('Email or password is incorrect.')
+      if (response.user.isPlatformAdmin) {
+        saveSession(sessionFromAuth(response, null))
+        navigate('/platform', { replace: true })
         return
+      }
+
+      clearSession()
+      setFormError('Sign in at your workspace subdomain.')
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.status === 401) {
+          setFormError('Email or password is incorrect.')
+          return
+        }
+        if (error.code === 'auth.tenant_required') {
+          setFormError('Sign in at your workspace subdomain.')
+          return
+        }
+        if (error.code === 'auth.tenant_membership_required') {
+          setFormError('You are not a member of this workspace.')
+          return
+        }
       }
       setFormError(errorMessage(error))
     }
@@ -63,7 +90,19 @@ export function SignInPage() {
         <p className="text-sm leading-6 text-muted-foreground">
           Sign in to review payments, resolve exceptions and keep your reconciliation current.
         </p>
+        {tenantSlug ? (
+          <p className="text-xs text-muted-foreground">
+            Workspace: <span className="font-medium text-foreground">{tenantSlug}</span>
+          </p>
+        ) : null}
       </div>
+
+      {passwordChanged || passwordReset ? (
+        <div className="flex items-start gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2.5 text-sm text-success">
+          <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>{passwordReset ? 'Password reset. Sign in with your new password.' : 'Password changed. Sign in again.'}</span>
+        </div>
+      ) : null}
 
       <form className="space-y-5" onSubmit={onSubmit} noValidate>
         <div className="space-y-1.5">
@@ -83,7 +122,12 @@ export function SignInPage() {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="password">Password</Label>
+            <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline">
+              Forgot password?
+            </Link>
+          </div>
           <div className="relative">
             <Input
               id="password"
@@ -141,4 +185,26 @@ export function SignInPage() {
       </p>
     </div>
   )
+}
+
+function tenantSlugFromHost(hostname: string): string | null {
+  const host = hostname.toLowerCase()
+
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+    return null
+  }
+
+  const labels = host.split('.').filter(Boolean)
+  if (labels.length < 2) {
+    return null
+  }
+
+  const candidate = labels[0]
+  if (candidate === 'www' || candidate === 'app' || candidate === 'api') {
+    return null
+  }
+
+  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(candidate) && candidate.length >= 2 && candidate.length <= 40
+    ? candidate
+    : null
 }

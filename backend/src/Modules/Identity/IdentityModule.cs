@@ -25,13 +25,18 @@ public static class IdentityModule
             options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
         });
 
+        services.Configure<Microsoft.AspNetCore.Identity.DataProtectionTokenProviderOptions>(
+            options => options.TokenLifespan = TimeSpan.FromHours(1));
+
         services.AddJwtAuthentication(configuration);
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<ILoginTenantResolver, LoginTenantResolver>();
         services.AddScoped<AuthService>();
         services.AddScoped<PasswordResetService>();
         services.AddScoped<IIdentityFacade, IdentityFacade>();
         services.AddScoped<ICurrentUser, JwtCurrentUser>();
         services.AddScoped<IActorContext, ActorContext>();
+        services.AddScoped<IEmailSender, LoggingEmailSender>();
 
         return services;
     }

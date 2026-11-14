@@ -1,11 +1,18 @@
 import { apiRequest } from '@/lib/api-client'
-import type { AuthSession } from '@/lib/session'
 
 export type AuthUser = {
   id: string
   email: string
   displayName: string
   isPlatformAdmin: boolean
+  emailConfirmed: boolean
+}
+
+export type TenantLoginDto = {
+  tenantId: string
+  tenantName: string
+  tenantSlug: string
+  role: string
 }
 
 export type AuthResponse = {
@@ -14,6 +21,7 @@ export type AuthResponse = {
   accessTokenExpiresAt: string
   refreshTokenExpiresAt: string
   user: AuthUser
+  tenant: TenantLoginDto | null
 }
 
 export type Membership = {
@@ -48,10 +56,14 @@ export type RegisterTenantResponse = {
   }
 }
 
-export function loginRequest(email: string, password: string): Promise<AuthResponse> {
+export type ForgotPasswordResponse = {
+  resetToken: string | null
+}
+
+export function loginRequest(email: string, password: string, tenantSlug?: string): Promise<AuthResponse> {
   return apiRequest<AuthResponse>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, tenantSlug }),
   })
 }
 
@@ -66,11 +78,34 @@ export function registerTenantRequest(payload: RegisterTenantPayload): Promise<R
   })
 }
 
-export function sessionFromAuth(response: AuthResponse, tenantSlug: string | null): AuthSession {
-  return {
-    accessToken: response.accessToken,
-    refreshToken: response.refreshToken,
-    tenantSlug,
-    user: response.user,
-  }
+export function getCurrentUser(): Promise<AuthUser> {
+  return apiRequest<AuthUser>('/auth/me')
+}
+
+export function logoutRequest(refreshToken: string): Promise<void> {
+  return apiRequest<void>('/auth/logout', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken }),
+  })
+}
+
+export function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  return apiRequest<void>('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+}
+
+export function forgotPassword(email: string): Promise<ForgotPasswordResponse> {
+  return apiRequest<ForgotPasswordResponse>('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function resetPassword(email: string, token: string, newPassword: string): Promise<void> {
+  return apiRequest<void>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, token, newPassword }),
+  })
 }

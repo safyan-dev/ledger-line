@@ -2,7 +2,12 @@ using PaymentReconciliation.SharedKernel.Results;
 
 namespace PaymentReconciliation.Modules.Identity.Contracts;
 
-public sealed record IdentityUser(Guid Id, string Email, string DisplayName, bool IsPlatformAdmin);
+public sealed record IdentityUser(
+    Guid Id,
+    string Email,
+    string DisplayName,
+    bool IsPlatformAdmin,
+    bool EmailConfirmed);
 
 public sealed record IssuedSession(
     string AccessToken,

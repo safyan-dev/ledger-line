@@ -39,7 +39,12 @@ public static class TestClientExtensions
 
     public static async Task<TestSession> LoginAsync(this HttpClient client, string email, Guid tenantId, string tenantSlug)
     {
-        var response = await client.PostAsJsonAsync("/api/auth/login", new { email, password = "TenantPass123!" });
+        var response = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "TenantPass123!",
+            tenantSlug
+        });
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var accessToken = body.GetProperty("accessToken").GetString()!;
