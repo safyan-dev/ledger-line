@@ -1,3 +1,5 @@
+import type { AuthUser } from '@/lib/auth-api'
+
 export type PagedResult<T> = {
   items: T[]
   page: number
@@ -197,6 +199,258 @@ export type DashboardSummary = {
   volume: VolumePoint[]
   reviewQueue: ReviewQueueItem[]
   recentActivity: ActivityItem[]
+}
+
+export type TenantSettingsDto = {
+  id: string
+  name: string
+  slug: string
+  status: string
+  role: string
+  memberCount: number
+  businessContactEmail: string | null
+  defaultCurrency: string
+  timeZone: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type PlatformTenantDto = {
+  id: string
+  name: string
+  slug: string
+  status: string
+  memberCount: number
+  planCode: string | null
+  planName: string | null
+  createdAt: string
+  ownerEmail: string | null
+}
+
+export type PlatformTenantOwnerDto = {
+  id: string
+  name: string
+  email: string
+}
+
+export type PlatformTenantDetailsDto = {
+  id: string
+  name: string
+  slug: string
+  status: string
+  businessContactEmail: string | null
+  defaultCurrency: string
+  timeZone: string
+  createdAt: string
+  memberCount: number
+  owner: PlatformTenantOwnerDto | null
+  planCode: string | null
+  planName: string | null
+  subscriptionStatus: string | null
+  usage: UsageSummaryDto | null
+}
+
+export type PlatformPlanDto = {
+  code: string
+  name: string
+  tagline: string
+  audience: string
+  monthlyPrice: number | null
+  priceNote: string
+  recommended: boolean
+  sortOrder: number
+  isActive: boolean
+  features: { key: string; label: string; included: boolean; note: string | null }[]
+  limits: { key: string; label: string; value: number | null; display: string }[]
+}
+
+export type PlatformSubscriptionDto = {
+  id: string
+  tenantId: string
+  tenantName: string
+  planCode: string
+  planName: string
+  status: string
+  activationSource: string
+  paymentConfirmed: boolean
+  startDate: string
+  currentPeriodStart: string
+  currentPeriodEnd: string | null
+  createdAt: string
+}
+
+export type PlatformSupportTicketDto = {
+  id: string
+  tenantId: string
+  tenantName: string
+  subject: string
+  category: string
+  priority: string
+  status: string
+  createdBy: string
+  createdAt: string
+}
+
+export type PlatformSupportTicketDetailDto = {
+  tenantId: string
+  tenantName: string
+  ticket: SupportTicketDto
+  messages: SupportTicketMessageDto[]
+}
+
+export type PlatformRecentTenantDto = {
+  id: string
+  name: string
+  ownerEmail: string | null
+  planName: string | null
+  createdAt: string
+}
+
+export type PlatformAttentionSubscriptionDto = {
+  id: string
+  tenantId: string
+  tenantName: string
+  planName: string
+  status: string
+  currentPeriodEnd: string | null
+}
+
+export type PlatformDashboardDto = {
+  totalTenants: number
+  activeTenants: number
+  suspendedTenants: number
+  activeSubscriptions: number
+  trialSubscriptions: number
+  recentRegistrations: PlatformRecentTenantDto[]
+  subscriptionsRequiringAttention: PlatformAttentionSubscriptionDto[]
+}
+
+export type TenantMemberDto = {
+  userId: string
+  email: string
+  displayName: string
+  role: string
+  joinedAt: string
+}
+
+export type InvitationStatus = 'Pending' | 'Accepted' | 'Expired' | 'Revoked'
+
+export type TenantInvitationDto = {
+  id: string
+  email: string
+  role: string
+  status: InvitationStatus
+  expiresAt: string
+  createdAt: string
+  lastSentAt: string
+}
+
+export type IssuedTenantInvitationDto = {
+  invitation: TenantInvitationDto
+  token: string | null
+}
+
+export type InvitationSessionDto = {
+  accessToken: string
+  refreshToken: string
+  accessTokenExpiresAt: string
+  refreshTokenExpiresAt: string
+  user: AuthUser
+}
+
+export type AcceptInvitationResponse = {
+  tenantId: string
+  tenantSlug: string
+  tenantName: string
+  role: string
+  session: InvitationSessionDto | null
+}
+
+export type SubscriptionDto = {
+  id: string
+  planCode: string
+  planName: string
+  status: string
+  activationSource: string
+  paymentConfirmed: boolean
+  startDate: string
+  currentPeriodStart: string
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+  pendingPlanCode: string | null
+  pendingPlanEffectiveAt: string | null
+}
+
+export type SubscriptionHistoryDto = {
+  id: string
+  event: string
+  status: string
+  planCode: string
+  planName: string
+  previousPlanCode: string | null
+  note: string | null
+  occurredAt: string
+}
+
+export type AccessFeatureDto = {
+  key: string
+  label: string
+  included: boolean
+  note: string | null
+}
+
+export type UsageMetricDto = {
+  key: string
+  label: string
+  used: number
+  limit: number | null
+  remaining: number | null
+  period: string
+}
+
+export type UsageSummaryDto = {
+  planCode: string
+  planName: string
+  status: string
+  periodStart: string
+  periodEnd: string
+  metrics: UsageMetricDto[]
+  features: AccessFeatureDto[]
+}
+
+export type FeatureAvailabilityDto = {
+  key: string
+  enabled: boolean
+}
+
+export type SupportTicketDto = {
+  id: string
+  subject: string
+  description: string
+  category: string
+  priority: string
+  status: string
+  createdByUserId: string
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+  resolvedAt: string | null
+  closedAt: string | null
+}
+
+export type SupportTicketMessageDto = {
+  id: string
+  authorUserId: string
+  authorName: string
+  authorRole: string
+  body: string
+  isInternal: boolean
+  createdAt: string
+}
+
+export type SupportTicketDetailDto = {
+  ticket: SupportTicketDto
+  messages: SupportTicketMessageDto[]
 }
 
 export type ProblemDetails = {

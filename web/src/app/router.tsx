@@ -1,8 +1,13 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { createBrowserRouter, Link, Navigate, RouterProvider, useRouteError } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { AppShell } from '@/components/layout/app-shell'
+import { RequirePlatformAdmin } from '@/components/layout/require-platform-admin'
+import { PlatformLayout } from '@/components/layout/platform-layout'
+import { RequireRole } from '@/components/layout/require-role'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SettingsLayout } from '@/features/settings/settings-layout'
 import { publicSiteRoutes } from '@/public-site/routes'
 import { useSession } from '@/lib/session'
 
@@ -30,6 +35,62 @@ const ReconciliationPage = lazy(() =>
 const AuditPage = lazy(() =>
   import('@/features/audit/audit-page').then((module) => ({ default: module.AuditPage })),
 )
+const AccountPage = lazy(() =>
+  import('@/features/account/account-page').then((module) => ({ default: module.AccountPage })),
+)
+const TeamPage = lazy(() =>
+  import('@/features/team/team-page').then((module) => ({ default: module.TeamPage })),
+)
+const SubscriptionPage = lazy(() =>
+  import('@/features/subscription/subscription-page').then((module) => ({ default: module.SubscriptionPage })),
+)
+const WorkspaceSettingsPage = lazy(() =>
+  import('@/features/workspace/workspace-settings-page').then((module) => ({
+    default: module.WorkspaceSettingsPage,
+  })),
+)
+const ReportsPage = lazy(() =>
+  import('@/features/reports/reports-page').then((module) => ({ default: module.ReportsPage })),
+)
+const SupportHomePage = lazy(() =>
+  import('@/features/support/support-home-page').then((module) => ({ default: module.SupportHomePage })),
+)
+const SupportTicketsPage = lazy(() =>
+  import('@/features/support/support-tickets-page').then((module) => ({
+    default: module.SupportTicketsPage,
+  })),
+)
+const SupportTicketPage = lazy(() =>
+  import('@/features/support/support-ticket-page').then((module) => ({
+    default: module.SupportTicketPage,
+  })),
+)
+const PlatformTenantsPage = lazy(() =>
+  import('@/features/platform/platform-page').then((module) => ({ default: module.PlatformPage })),
+)
+const PlatformDashboardPage = lazy(() =>
+  import('@/features/platform/platform-dashboard-page').then((module) => ({ default: module.PlatformDashboardPage })),
+)
+const PlatformTenantDetailPage = lazy(() =>
+  import('@/features/platform/platform-tenant-detail-page').then((module) => ({
+    default: module.PlatformTenantDetailPage,
+  })),
+)
+const PlatformPlansPage = lazy(() =>
+  import('@/features/platform/platform-plans-page').then((module) => ({
+    default: module.PlatformPlansPage,
+  })),
+)
+const PlatformSubscriptionsPage = lazy(() =>
+  import('@/features/platform/platform-subscriptions-page').then((module) => ({
+    default: module.PlatformSubscriptionsPage,
+  })),
+)
+const PlatformSupportPage = lazy(() =>
+  import('@/features/platform/platform-support-page').then((module) => ({
+    default: module.PlatformSupportPage,
+  })),
+)
 
 function PageSkeleton() {
   return (
@@ -52,9 +113,18 @@ function withSuspense(element: ReactNode) {
 
 function RequireSession({ children }: { children: ReactNode }) {
   const session = useSession()
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    if (!session) queryClient.clear()
+  }, [session, queryClient])
 
   if (!session) {
     return <Navigate to="/sign-in" replace />
+  }
+
+  if (session.user.isPlatformAdmin && !session.tenantSlug) {
+    return <Navigate to="/platform" replace />
   }
 
   return <>{children}</>
@@ -94,6 +164,26 @@ function NotFoundPage() {
 const router = createBrowserRouter([
   ...publicSiteRoutes,
   {
+    path: '/platform',
+    element: (
+      <RequirePlatformAdmin>
+        <PlatformLayout />
+      </RequirePlatformAdmin>
+    ),
+    errorElement: <RouteError />,
+    children: [
+      {
+        index: true,
+        element: withSuspense(<PlatformDashboardPage />),
+      },
+      { path: 'tenants', element: withSuspense(<PlatformTenantsPage />) },
+      { path: 'tenants/:tenantId', element: withSuspense(<PlatformTenantDetailPage />) },
+      { path: 'plans', element: withSuspense(<PlatformPlansPage />) },
+      { path: 'subscriptions', element: withSuspense(<PlatformSubscriptionsPage />) },
+      { path: 'support', element: withSuspense(<PlatformSupportPage />) },
+    ],
+  },
+  {
     element: (
       <RequireSession>
         <AppShell />
@@ -109,6 +199,43 @@ const router = createBrowserRouter([
       { path: '/webhooks', element: withSuspense(<WebhooksPage />) },
       { path: '/reconciliation', element: withSuspense(<ReconciliationPage />) },
       { path: '/audit', element: withSuspense(<AuditPage />) },
+      { path: '/reports', element: withSuspense(<ReportsPage />) },
+      {
+        path: '/settings',
+        element: withSuspense(<SettingsLayout />),
+        children: [
+          { index: true, element: <Navigate to="/settings/profile" replace /> },
+          { path: 'profile', element: withSuspense(<AccountPage />) },
+          {
+            path: 'team',
+            element: withSuspense(
+              <RequireRole
+                allow={['Owner', 'TenantAdmin']}
+                title="Team management is restricted"
+                description="Only workspace owners and tenant admins can manage team members."
+              >
+                <TeamPage />
+              </RequireRole>,
+            ),
+          },
+          { path: 'subscription', element: withSuspense(<SubscriptionPage />) },
+          {
+            path: 'workspace',
+            element: withSuspense(
+              <RequireRole
+                allow={['Owner', 'TenantAdmin']}
+                title="Workspace settings are restricted"
+                description="Only workspace owners and tenant admins can change workspace settings."
+              >
+                <WorkspaceSettingsPage />
+              </RequireRole>,
+            ),
+          },
+        ],
+      },
+      { path: '/support', element: withSuspense(<SupportHomePage />) },
+      { path: '/support/tickets', element: withSuspense(<SupportTicketsPage />) },
+      { path: '/support/tickets/:ticketId', element: withSuspense(<SupportTicketPage />) },
     ],
   },
   { path: '*', element: <NotFoundPage /> },

@@ -1,8 +1,11 @@
 import { Outlet } from 'react-router-dom'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { TopBar } from '@/components/layout/top-bar'
+import { useTenantSessionSync } from '@/lib/use-tenant-session-sync'
 
 export function AppShell() {
+  useTenantSessionSync()
+
   return (
     <div className="min-h-dvh bg-background">
       <div className="lg:grid lg:grid-cols-[256px_1fr]">

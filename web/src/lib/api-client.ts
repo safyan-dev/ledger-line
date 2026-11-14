@@ -69,7 +69,10 @@ async function refreshSession(session: AuthSession): Promise<AuthSession | null>
     const next: AuthSession = {
       accessToken: body.accessToken,
       refreshToken: body.refreshToken,
+      tenantId: session.tenantId,
+      tenantName: session.tenantName,
       tenantSlug: session.tenantSlug,
+      role: session.role,
       user: (body.user ?? session.user) as AuthUser,
     }
     saveSession(next)

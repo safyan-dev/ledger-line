@@ -42,6 +42,52 @@ const reconciliationOutcomes: Record<string, StatusMeta> = {
   ManuallyMatched: { label: 'Manual match', tone: 'info' },
 }
 
+const tenantRoles: Record<string, StatusMeta> = {
+  Owner: { label: 'Owner', tone: 'info' },
+  TenantAdmin: { label: 'Tenant admin', tone: 'info' },
+  Admin: { label: 'Tenant admin', tone: 'info' },
+  Finance: { label: 'Finance', tone: 'neutral' },
+}
+
+const invitationStatuses: Record<string, StatusMeta> = {
+  Pending: { label: 'Pending', tone: 'warning' },
+  Accepted: { label: 'Accepted', tone: 'success' },
+  Expired: { label: 'Expired', tone: 'neutral' },
+  Revoked: { label: 'Revoked', tone: 'danger' },
+}
+
+const subscriptionStatuses: Record<string, StatusMeta> = {
+  Trialing: { label: 'Trialing', tone: 'info' },
+  Active: { label: 'Active', tone: 'success' },
+  PastDue: { label: 'Past due', tone: 'warning' },
+  Canceled: { label: 'Canceled', tone: 'neutral' },
+  Expired: { label: 'Expired', tone: 'danger' },
+  Suspended: { label: 'Suspended', tone: 'danger' },
+}
+
+const supportTicketStatuses: Record<string, StatusMeta> = {
+  Open: { label: 'Open', tone: 'info' },
+  InProgress: { label: 'In progress', tone: 'warning' },
+  WaitingForCustomer: { label: 'Waiting for customer', tone: 'warning' },
+  Resolved: { label: 'Resolved', tone: 'success' },
+  Closed: { label: 'Closed', tone: 'neutral' },
+}
+
+const supportTicketPriorities: Record<string, StatusMeta> = {
+  Low: { label: 'Low', tone: 'neutral' },
+  Normal: { label: 'Normal', tone: 'info' },
+  High: { label: 'High', tone: 'danger' },
+}
+
+const supportTicketCategories: Record<string, StatusMeta> = {
+  TechnicalIssue: { label: 'Technical issue', tone: 'outline' },
+  PaymentIssue: { label: 'Payment issue', tone: 'outline' },
+  ReconciliationIssue: { label: 'Reconciliation issue', tone: 'outline' },
+  AccountIssue: { label: 'Account issue', tone: 'outline' },
+  BillingIssue: { label: 'Billing issue', tone: 'outline' },
+  Other: { label: 'Other', tone: 'outline' },
+}
+
 const strategies: Record<string, string> = {
   ExactReference: 'Exact reference',
   CustomerAndAmount: 'Customer + amount',
@@ -69,6 +115,30 @@ export function reconciliationOutcomeMeta(value: string): StatusMeta {
   return reconciliationOutcomes[value] ?? fallback(value)
 }
 
+export function tenantRoleMeta(value: string): StatusMeta {
+  return tenantRoles[value] ?? fallback(value)
+}
+
+export function invitationStatusMeta(value: string): StatusMeta {
+  return invitationStatuses[value] ?? fallback(value)
+}
+
+export function subscriptionStatusMeta(value: string): StatusMeta {
+  return subscriptionStatuses[value] ?? fallback(value)
+}
+
+export function supportTicketStatusMeta(value: string): StatusMeta {
+  return supportTicketStatuses[value] ?? fallback(value)
+}
+
+export function supportTicketPriorityMeta(value: string): StatusMeta {
+  return supportTicketPriorities[value] ?? fallback(value)
+}
+
+export function supportTicketCategoryMeta(value: string): StatusMeta {
+  return supportTicketCategories[value] ?? fallback(value)
+}
+
 export function strategyLabel(value: string): string {
   return strategies[value] ?? value
 }
@@ -84,6 +154,8 @@ export function moduleLabel(module: string): string {
     webhooks: 'Webhooks',
     reconciliation: 'Reconciliation',
     audit: 'Audit',
+    tenancy: 'Tenancy',
+    support: 'Support',
   }
 
   return labels[module] ?? module

@@ -3,6 +3,9 @@ import { AuthLayout } from '@/public-site/layout/auth-layout'
 import { PublicLayout } from '@/public-site/layout/public-layout'
 import { HomePage } from '@/public-site/pages/home-page'
 import { PlaceholderPage } from '@/public-site/pages/placeholder-page'
+import { AcceptInvitationPage } from '@/public-site/pages/accept-invitation-page'
+import { ForgotPasswordPage } from '@/public-site/pages/forgot-password-page'
+import { ResetPasswordPage } from '@/public-site/pages/reset-password-page'
 import { SignInPage } from '@/public-site/pages/sign-in-page'
 import { SignUpPage } from '@/public-site/pages/sign-up-page'
 
@@ -69,6 +72,9 @@ export const publicSiteRoutes: RouteObject[] = [
     children: [
       { path: '/sign-in', element: <SignInPage /> },
       { path: '/sign-up', element: <SignUpPage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
+      { path: '/reset-password', element: <ResetPasswordPage /> },
+      { path: '/accept-invitation', element: <AcceptInvitationPage /> },
     ],
   },
 ]
