@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using PaymentReconciliation.Modules.Orders.Contracts;
 using PaymentReconciliation.Modules.Orders.Domain;
+using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.Persistence.Abstractions;
 using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Cqrs;
@@ -49,7 +50,8 @@ public sealed class CreateOrderHandler(
     IOrderRepository repository,
     IAppDbContext dbContext,
     ICurrentUser currentUser,
-    ITenantContext tenantContext)
+    ITenantContext tenantContext,
+    IUsageLimitEnforcer usage)
     : ICommandHandler<CreateOrderCommand, OrderDto>
 {
     public async Task<Result<OrderDto>> Handle(CreateOrderCommand command, CancellationToken cancellationToken)
@@ -82,6 +84,12 @@ public sealed class CreateOrderHandler(
                     "order.duplicate_number",
                     $"Order number '{requestedOrderNumber}' is already used."));
             }
+        }
+
+        var limit = await usage.EnsureWithinLimitAsync(UsageMetric.OrdersPerMonth, cancellationToken);
+        if (limit.IsFailure)
+        {
+            return Result.Failure<OrderDto>(limit.Error!);
         }
 
         var orderNumber = requestedOrderNumber;

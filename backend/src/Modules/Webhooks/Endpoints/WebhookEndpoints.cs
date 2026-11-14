@@ -172,6 +172,21 @@ public static class WebhookEndpoints
         .Produces<WebhookEventDto>()
         .ProducesProblem(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{id:guid}/reprocess", async (
+            Guid id,
+            IDispatcher dispatcher,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await dispatcher.SendAsync(new ReprocessWebhookEventCommand(id), cancellationToken);
+            return result.IsFailure ? result.Error!.ToProblemResult() : Results.NoContent();
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantMember)
+        .WithName("ReprocessWebhookEvent")
+        .Produces(StatusCodes.Status204NoContent)
+        .ProducesProblem(StatusCodes.Status403Forbidden)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         return app;
     }
 

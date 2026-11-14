@@ -88,6 +88,7 @@ public sealed class Subscription : AggregateRoot, ITenantOwned
         DateTimeOffset now)
     {
         PlanId = planId;
+        Status = SubscriptionStatus.Active;
         ActivationSource = activation;
         PaymentConfirmed = paymentConfirmed;
         CurrentPeriodStart = now;
@@ -109,9 +110,88 @@ public sealed class Subscription : AggregateRoot, ITenantOwned
 
     public void CancelAtPeriodEndNow(DateTimeOffset now)
     {
+        if (Status == SubscriptionStatus.Canceled)
+        {
+            return;
+        }
+
         CancelAtPeriodEnd = true;
         UpdatedAt = now;
+
+        if (CurrentPeriodEnd is null)
+        {
+            Status = SubscriptionStatus.Canceled;
+            Raise(new SubscriptionCanceled(TenantId, Id, now));
+            return;
+        }
+
         Raise(new SubscriptionCancellationScheduled(TenantId, Id, CurrentPeriodEnd, now));
+    }
+
+    public bool Reactivate(DateTimeOffset now, bool isFree)
+    {
+        if (Status is SubscriptionStatus.Active or SubscriptionStatus.Trialing && CancelAtPeriodEnd)
+        {
+            CancelAtPeriodEnd = false;
+            UpdatedAt = now;
+            Raise(new SubscriptionReactivated(TenantId, Id, PlanId, WasExpired: false, now));
+            return true;
+        }
+
+        if (Status is SubscriptionStatus.Expired or SubscriptionStatus.Canceled or SubscriptionStatus.Suspended)
+        {
+            var wasExpired = Status is SubscriptionStatus.Expired or SubscriptionStatus.Canceled;
+            Status = SubscriptionStatus.Active;
+            CancelAtPeriodEnd = false;
+            if (wasExpired || CurrentPeriodEnd is not { } currentEnd || currentEnd <= now)
+            {
+                CurrentPeriodStart = now;
+                CurrentPeriodEnd = isFree ? null : now.Add(BillingPeriod);
+            }
+            StartDate = StartDate == default ? now : StartDate;
+            UpdatedAt = now;
+            Raise(new SubscriptionReactivated(TenantId, Id, PlanId, wasExpired, now));
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool ExtendPeriod(int days, DateTimeOffset now)
+    {
+        if (days is < 1 or > 365
+            || Status is SubscriptionStatus.Canceled or SubscriptionStatus.Expired or SubscriptionStatus.Suspended)
+        {
+            return false;
+        }
+
+        var anchor = CurrentPeriodEnd is { } end && end > now ? end : now;
+        CurrentPeriodEnd = anchor.AddDays(days);
+        UpdatedAt = now;
+        return true;
+    }
+
+    public bool ApplyPendingPlanChange(bool isFree, DateTimeOffset now)
+    {
+        if (!IsActive || PendingPlanId is not { } pendingPlanId)
+        {
+            return false;
+        }
+
+        if (PendingPlanEffectiveAt is { } effectiveAt && effectiveAt > now)
+        {
+            return false;
+        }
+
+        PlanId = pendingPlanId;
+        PendingPlanId = null;
+        PendingPlanEffectiveAt = null;
+        CancelAtPeriodEnd = false;
+        CurrentPeriodStart = now;
+        CurrentPeriodEnd = isFree ? null : now.Add(BillingPeriod);
+        UpdatedAt = now;
+        Raise(new SubscriptionPlanChanged(TenantId, Id, PlanId, IsDowngrade: true, now));
+        return true;
     }
 
     public bool Renew(DateTimeOffset now, Guid? idempotentPlanId = null)
@@ -149,9 +229,18 @@ public sealed class Subscription : AggregateRoot, ITenantOwned
             return false;
         }
 
-        Status = SubscriptionStatus.Expired;
+        Status = CancelAtPeriodEnd ? SubscriptionStatus.Canceled : SubscriptionStatus.Expired;
         UpdatedAt = now;
-        Raise(new SubscriptionExpired(TenantId, Id, end, now));
+
+        if (Status == SubscriptionStatus.Canceled)
+        {
+            Raise(new SubscriptionCanceled(TenantId, Id, now));
+        }
+        else
+        {
+            Raise(new SubscriptionExpired(TenantId, Id, end, now));
+        }
+
         return true;
     }
 

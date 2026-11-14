@@ -123,3 +123,43 @@ public sealed class SubscriptionSuspendedAuditHandler(IAuditLogRepository reposi
         return Task.FromResult(Result.Success());
     }
 }
+
+public sealed class SubscriptionReactivatedAuditHandler(IAuditLogRepository repository)
+    : IDomainEventHandler<SubscriptionReactivated>
+{
+    public Task<Result> HandleAsync(SubscriptionReactivated domainEvent, CancellationToken cancellationToken)
+    {
+        repository.Add(AuditLog.Create(
+            AuditActor.System,
+            "subscription.reactivated",
+            "tenancy",
+            "Subscription",
+            domainEvent.SubscriptionId,
+            domainEvent.WasExpired
+                ? "Subscription reactivated after expiry."
+                : "Scheduled subscription cancellation cleared.",
+            new { domainEvent.PlanId },
+            tenantId: domainEvent.TenantId));
+
+        return Task.FromResult(Result.Success());
+    }
+}
+
+public sealed class SubscriptionCanceledAuditHandler(IAuditLogRepository repository)
+    : IDomainEventHandler<SubscriptionCanceled>
+{
+    public Task<Result> HandleAsync(SubscriptionCanceled domainEvent, CancellationToken cancellationToken)
+    {
+        repository.Add(AuditLog.Create(
+            AuditActor.System,
+            "subscription.canceled",
+            "tenancy",
+            "Subscription",
+            domainEvent.SubscriptionId,
+            "Subscription canceled. Tenant data was retained.",
+            null,
+            tenantId: domainEvent.TenantId));
+
+        return Task.FromResult(Result.Success());
+    }
+}

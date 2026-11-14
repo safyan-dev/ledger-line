@@ -39,13 +39,17 @@ public sealed class SubscriptionExpiryService(
                 continue;
             }
 
+            var canceled = subscription.Status == SubscriptionStatus.Canceled;
+
             dbContext.Set<SubscriptionHistory>().Add(SubscriptionHistory.Create(
                 subscription.TenantId,
                 subscription.Id,
                 subscription.PlanId,
-                "subscription.expired",
+                canceled ? "subscription.canceled" : "subscription.expired",
                 subscription.Status,
-                note: "Subscription expired. Tenant data was retained.",
+                note: canceled
+                    ? "Subscription canceled. Tenant data was retained."
+                    : "Subscription expired. Tenant data was retained.",
                 occurredAt: now));
         }
 
@@ -58,6 +62,77 @@ public sealed class SubscriptionExpiryService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return due.Count;
+    }
+
+    public async Task<int> ApplyDuePlanChangesAsync(CancellationToken cancellationToken = default)
+    {
+        using var _ = tenantBoundaryBypass.Begin();
+
+        var now = DateTimeOffset.UtcNow;
+
+        var due = await dbContext.Set<Subscription>()
+            .IgnoreQueryFilters()
+            .Where(subscription =>
+                (subscription.Status == SubscriptionStatus.Active
+                 || subscription.Status == SubscriptionStatus.Trialing)
+                && subscription.PendingPlanId != null
+                && (subscription.PendingPlanEffectiveAt == null || subscription.PendingPlanEffectiveAt <= now))
+            .ToListAsync(cancellationToken);
+
+        if (due.Count == 0)
+        {
+            return 0;
+        }
+
+        var planIds = due
+            .Where(subscription => subscription.PendingPlanId is not null)
+            .Select(subscription => subscription.PendingPlanId!.Value)
+            .Distinct()
+            .ToList();
+
+        var plans = await dbContext.Set<Plan>()
+            .AsNoTracking()
+            .Where(plan => planIds.Contains(plan.Id))
+            .Select(plan => new { plan.Id, plan.MonthlyPrice })
+            .ToDictionaryAsync(plan => plan.Id, cancellationToken);
+
+        var applied = 0;
+
+        foreach (var subscription in due)
+        {
+            if (subscription.PendingPlanId is not { } pendingPlanId)
+            {
+                continue;
+            }
+
+            var isFree = plans.TryGetValue(pendingPlanId, out var plan) && plan.MonthlyPrice == 0m;
+
+            if (!subscription.ApplyPendingPlanChange(isFree, now))
+            {
+                continue;
+            }
+
+            dbContext.Set<SubscriptionHistory>().Add(SubscriptionHistory.Create(
+                subscription.TenantId,
+                subscription.Id,
+                subscription.PlanId,
+                "subscription.downgrade_applied",
+                subscription.Status,
+                note: "Scheduled plan change applied at the end of the previous period.",
+                occurredAt: now));
+
+            applied++;
+        }
+
+        var dispatch = await unitOfWork.DispatchDomainEventsAsync(cancellationToken);
+        if (dispatch.IsFailure)
+        {
+            throw new InvalidOperationException(dispatch.Error!.Message);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return applied;
     }
 }
 
@@ -75,6 +150,7 @@ public sealed class SubscriptionExpiryWorker(
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var service = scope.ServiceProvider.GetRequiredService<SubscriptionExpiryService>();
+                await service.ApplyDuePlanChangesAsync(stoppingToken);
                 await service.ExpireDueAsync(stoppingToken);
             }
             catch (OperationCanceledException)

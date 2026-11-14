@@ -38,3 +38,15 @@ public sealed record SubscriptionSuspended(
     Guid TenantId,
     Guid SubscriptionId,
     DateTimeOffset SuspendedAt) : DomainEvent;
+
+public sealed record SubscriptionReactivated(
+    Guid TenantId,
+    Guid SubscriptionId,
+    Guid PlanId,
+    bool WasExpired,
+    DateTimeOffset ReactivatedAt) : DomainEvent;
+
+public sealed record SubscriptionCanceled(
+    Guid TenantId,
+    Guid SubscriptionId,
+    DateTimeOffset CanceledAt) : DomainEvent;

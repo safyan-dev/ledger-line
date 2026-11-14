@@ -5,6 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="../../SharedKernel/SharedKernel.csproj" />
     <ProjectReference Include="../../Persistence.Abstractions/Persistence.Abstractions.csproj" />
+    <ProjectReference Include="../Tenancy/Tenancy.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FluentValidation" />

@@ -60,7 +60,7 @@ public sealed class ProcessWebhookEventHandler(
 
         if (applyResult.IsFailure)
         {
-            webhookEvent.MarkFailed(applyResult.Error!.Message);
+            webhookEvent.MarkFailed(FormatFailure(applyResult.Error!));
             return Result.Success(Unit.Value);
         }
 
@@ -73,6 +73,21 @@ public sealed class ProcessWebhookEventHandler(
 
         webhookEvent.MarkProcessed(applyResult.Value.Payment.Id);
         return Result.Success(Unit.Value);
+    }
+
+    private static string FormatFailure(Error error)
+    {
+        var reason = $"{error.Code}: {error.Message}";
+
+        if (error.Failures is { Count: > 0 })
+        {
+            var details = string.Join(
+                "; ",
+                error.Failures.Select(pair => $"{pair.Key}: {string.Join(", ", pair.Value)}"));
+            reason = $"{reason} {details}";
+        }
+
+        return reason.Length <= 400 ? reason : reason[..400];
     }
 
     private static string FormatReason(Error error)
@@ -88,6 +103,39 @@ public sealed class ProcessWebhookEventHandler(
         }
 
         return reason.Length <= 400 ? reason : reason[..400];
+    }
+}
+
+public sealed record ReprocessWebhookEventCommand(Guid WebhookEventId) : ICommand<Unit>;
+
+public sealed class ReprocessWebhookEventHandler(
+    IWebhookEventRepository repository,
+    IDispatcher dispatcher)
+    : ICommandHandler<ReprocessWebhookEventCommand, Unit>
+{
+    public async Task<Result<Unit>> Handle(
+        ReprocessWebhookEventCommand command,
+        CancellationToken cancellationToken)
+    {
+        var webhookEvent = await repository.GetByIdAsync(command.WebhookEventId, cancellationToken);
+        if (webhookEvent is null)
+        {
+            return Result.Failure<Unit>(Error.NotFound(
+                "webhook.not_found",
+                $"Webhook event {command.WebhookEventId} was not found."));
+        }
+
+        if (webhookEvent.Status != WebhookStatus.Failed
+            || webhookEvent.FailureReason is null
+            || !webhookEvent.FailureReason.StartsWith("plan.limit_reached", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure<Unit>(Error.Conflict(
+                "webhook.not_reprocessable",
+                "Only webhook events that failed because of a plan limit can be reprocessed."));
+        }
+
+        webhookEvent.MarkRetry();
+        return await dispatcher.SendAsync(new ProcessWebhookEventCommand(command.WebhookEventId), cancellationToken);
     }
 }
 

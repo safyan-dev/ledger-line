@@ -3,6 +3,7 @@ using PaymentReconciliation.Modules.Payments.Application;
 using PaymentReconciliation.Modules.Payments.Contracts;
 using PaymentReconciliation.Modules.Payments.Domain;
 using PaymentReconciliation.Modules.Payments.Infrastructure;
+using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.SharedKernel.Cqrs;
 
 namespace PaymentReconciliation.Modules.Payments;
@@ -16,6 +17,7 @@ public static class PaymentsModule
         services.AddScoped<IRefundRepository, RefundRepository>();
         services.AddScoped<IPaymentsFacade, PaymentsFacade>();
         services.AddScoped<IPaymentReporting, PaymentReporting>();
+        services.AddScoped<IUsageCounterSource, PaymentUsageCounterSource>();
         return services;
     }
 }

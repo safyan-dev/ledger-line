@@ -80,6 +80,12 @@ public sealed class Plan
             priceNote.Trim(),
             isRecommended,
             sortOrder);
+
+    public void SetActive(bool isActive)
+    {
+        IsActive = isActive;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
 }
 
 public sealed class Feature
@@ -137,6 +143,9 @@ public sealed class PlanFeature
 
     public static PlanFeature Create(Guid planId, Guid featureId, bool isIncluded, string? note = null)
         => new(Guid.NewGuid(), planId, featureId, isIncluded, note);
+
+    public void SetIncluded(bool isIncluded)
+        => IsIncluded = isIncluded;
 }
 
 public sealed class PlanLimit
@@ -169,4 +178,22 @@ public sealed class PlanLimit
 
     public static PlanLimit Create(Guid planId, string key, string label, int? value, string display)
         => new(Guid.NewGuid(), planId, key.Trim().ToLowerInvariant(), label.Trim(), value, display.Trim());
+
+    public void SetValue(int? value)
+    {
+        if (value is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "Usage limits cannot be negative.");
+        }
+
+        Value = value;
+        Display = value is null
+            ? "Unlimited"
+            : Key switch
+            {
+                "team_members" => $"{value} members",
+                "audit_history_days" => $"{value} days",
+                _ => $"{value:N0} / month"
+            };
+    }
 }

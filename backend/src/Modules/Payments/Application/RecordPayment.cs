@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PaymentReconciliation.Modules.Payments.Application;
 using PaymentReconciliation.Modules.Payments.Contracts;
 using PaymentReconciliation.Modules.Payments.Domain;
+using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Cqrs;
 using PaymentReconciliation.SharedKernel.Domain;
@@ -38,6 +39,7 @@ public sealed class RecordPaymentHandler(
     IPaymentRepository repository,
     ICurrentUser currentUser,
     ITenantContext tenantContext,
+    IUsageLimitEnforcer usage,
     ILogger<RecordPaymentHandler> logger)
     : ICommandHandler<RecordPaymentCommand, PaymentDto>
 {
@@ -68,6 +70,12 @@ public sealed class RecordPaymentHandler(
                 providerPaymentId,
                 existing.Id);
             return Result.Success(existing.ToDto());
+        }
+
+        var limit = await usage.EnsureWithinLimitAsync(UsageMetric.PaymentsPerMonth, cancellationToken);
+        if (limit.IsFailure)
+        {
+            return Result.Failure<PaymentDto>(limit.Error!);
         }
 
         var payment = Payment.Create(

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PaymentReconciliation.Modules.Payments.Application;
 using PaymentReconciliation.Modules.Payments.Contracts;
 using PaymentReconciliation.Modules.Payments.Domain;
+using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.Persistence.Abstractions;
 using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Diagnostics;
@@ -16,6 +17,7 @@ public sealed class PaymentsFacade(
     IPaymentRepository repository,
     IAppDbContext dbContext,
     ITenantContext tenantContext,
+    IUsageLimitEnforcer usage,
     ILogger<PaymentsFacade> logger) : IPaymentsFacade
 {
     public async Task<IReadOnlyDictionary<Guid, PaymentReference>> GetPaymentReferencesAsync(
@@ -87,6 +89,14 @@ public sealed class PaymentsFacade(
 
         if (existing is null)
         {
+            var limit = await usage.EnsureWithinLimitAsync(UsageMetric.PaymentsPerMonth, cancellationToken);
+            if (limit.IsFailure)
+            {
+                activity?.SetTag("payment.outcome", "limit_reached");
+                activity?.SetStatus(ActivityStatusCode.Error, limit.Error!.Message);
+                return Result.Failure<ProviderPaymentApplyResult>(limit.Error!);
+            }
+
             var created = succeeded
                 ? Payment.Create(
                     payment.Provider,

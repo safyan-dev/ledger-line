@@ -12,7 +12,7 @@ public sealed class PlanSeeder(IAppDbContext dbContext, IUnitOfWork unitOfWork)
         ("reconciliation.advanced", "Advanced reconciliation", "Multi-strategy matching with mismatch classification."),
         ("api_access", "API access", "Programmatic access to orders, payments and reconciliation."),
         ("csv_export", "CSV export", "Export records for Finance systems and spreadsheets."),
-        ("custom_roles", "Custom roles", "Owner, Admin and Finance roles for team permissions."),
+        ("custom_roles", "Custom roles", "Owner, TenantAdmin and Finance roles for team permissions."),
         ("priority_support", "Priority support", "Prioritised support for high-volume operations.")
     ];
 

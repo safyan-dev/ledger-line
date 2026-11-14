@@ -24,3 +24,13 @@ public sealed record EntitlementsDto(
     string Status,
     IReadOnlyList<PlanFeatureDto> Features,
     IReadOnlyList<PlanLimitDto> Limits);
+
+public sealed record SubscriptionHistoryDto(
+    Guid Id,
+    string Event,
+    string Status,
+    string PlanCode,
+    string PlanName,
+    string? PreviousPlanCode,
+    string? Note,
+    DateTimeOffset OccurredAt);

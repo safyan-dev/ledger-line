@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.Modules.Tenancy.Domain;
 using PaymentReconciliation.Persistence.Abstractions;
 using PaymentReconciliation.SharedKernel.Abstractions;
@@ -9,7 +10,10 @@ namespace PaymentReconciliation.Modules.Tenancy.Application;
 
 public sealed record GetSubscriptionQuery : IQuery<SubscriptionDto>;
 
-public sealed class GetSubscriptionHandler(IAppDbContext dbContext, ITenantContext tenantContext)
+public sealed class GetSubscriptionHandler(
+    IAppDbContext dbContext,
+    ITenantContext tenantContext,
+    ITenantAuthorizer authorizer)
     : IQueryHandler<GetSubscriptionQuery, SubscriptionDto>
 {
     public async Task<Result<SubscriptionDto>> Handle(
@@ -19,6 +23,12 @@ public sealed class GetSubscriptionHandler(IAppDbContext dbContext, ITenantConte
         if (tenantContext.TenantId is not { } tenantId)
         {
             return Result.Failure<SubscriptionDto>(Error.Forbidden("tenant.required", "A tenant context is required."));
+        }
+
+        var authorization = authorizer.Require(TenantPermission.ViewSubscription);
+        if (authorization.IsFailure)
+        {
+            return Result.Failure<SubscriptionDto>(authorization.Error!);
         }
 
         var subscription = await dbContext.Set<Subscription>()
@@ -75,7 +85,8 @@ public sealed record ChangeSubscriptionPlanCommand(string PlanCode) : ICommand<S
 public sealed class ChangeSubscriptionPlanHandler(
     IAppDbContext dbContext,
     ITenantContext tenantContext,
-    IPlanCatalog planCatalog)
+    IPlanCatalog planCatalog,
+    ITenantAuthorizer authorizer)
     : ICommandHandler<ChangeSubscriptionPlanCommand, SubscriptionDto>
 {
     public async Task<Result<SubscriptionDto>> Handle(
@@ -87,12 +98,10 @@ public sealed class ChangeSubscriptionPlanHandler(
             return Result.Failure<SubscriptionDto>(Error.Forbidden("tenant.required", "A tenant context is required."));
         }
 
-        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole)
-            || !TenantRoleRules.CanManageTenant(actorRole))
+        var authorization = authorizer.Require(TenantPermission.ManageSubscription);
+        if (authorization.IsFailure)
         {
-            return Result.Failure<SubscriptionDto>(Error.Forbidden(
-                "tenant.forbidden",
-                "Only an owner or admin can change the subscription."));
+            return Result.Failure<SubscriptionDto>(authorization.Error!);
         }
 
         var subscription = await dbContext.Set<Subscription>()
@@ -126,7 +135,9 @@ public sealed class ChangeSubscriptionPlanHandler(
 
         var now = DateTimeOffset.UtcNow;
 
-        if (targetPlan.SortOrder > currentPlan.SortOrder)
+        var isInactive = subscription.Status is SubscriptionStatus.Expired or SubscriptionStatus.Canceled;
+
+        if (targetPlan.SortOrder > currentPlan.SortOrder || isInactive)
         {
             subscription.ChangePlanImmediate(
                 targetPlan.Id,
@@ -188,7 +199,8 @@ public sealed record CancelSubscriptionCommand : ICommand<SubscriptionDto>;
 
 public sealed class CancelSubscriptionHandler(
     IAppDbContext dbContext,
-    ITenantContext tenantContext)
+    ITenantContext tenantContext,
+    ITenantAuthorizer authorizer)
     : ICommandHandler<CancelSubscriptionCommand, SubscriptionDto>
 {
     public async Task<Result<SubscriptionDto>> Handle(
@@ -200,12 +212,10 @@ public sealed class CancelSubscriptionHandler(
             return Result.Failure<SubscriptionDto>(Error.Forbidden("tenant.required", "A tenant context is required."));
         }
 
-        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole)
-            || !TenantRoleRules.CanManageTenant(actorRole))
+        var authorization = authorizer.Require(TenantPermission.ManageSubscription);
+        if (authorization.IsFailure)
         {
-            return Result.Failure<SubscriptionDto>(Error.Forbidden(
-                "tenant.forbidden",
-                "Only an owner or admin can cancel the subscription."));
+            return Result.Failure<SubscriptionDto>(authorization.Error!);
         }
 
         var subscription = await dbContext.Set<Subscription>()
@@ -221,14 +231,16 @@ public sealed class CancelSubscriptionHandler(
         var now = DateTimeOffset.UtcNow;
         subscription.CancelAtPeriodEndNow(now);
 
+        var isImmediate = subscription.Status == SubscriptionStatus.Canceled;
+
         dbContext.Set<SubscriptionHistory>().Add(SubscriptionHistory.Create(
             tenantId,
             subscription.Id,
             subscription.PlanId,
-            "subscription.cancel_scheduled",
+            isImmediate ? "subscription.canceled" : "subscription.cancel_scheduled",
             subscription.Status,
-            note: subscription.CurrentPeriodEnd is null
-                ? "Cancellation requested."
+            note: isImmediate
+                ? "Subscription canceled."
                 : "Cancellation takes effect at the end of the current period.",
             occurredAt: now));
 
@@ -236,11 +248,151 @@ public sealed class CancelSubscriptionHandler(
     }
 }
 
+public sealed record ReactivateSubscriptionCommand : ICommand<SubscriptionDto>;
+
+public sealed class ReactivateSubscriptionHandler(
+    IAppDbContext dbContext,
+    ITenantContext tenantContext,
+    ITenantAuthorizer authorizer)
+    : ICommandHandler<ReactivateSubscriptionCommand, SubscriptionDto>
+{
+    public async Task<Result<SubscriptionDto>> Handle(
+        ReactivateSubscriptionCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (tenantContext.TenantId is not { } tenantId)
+        {
+            return Result.Failure<SubscriptionDto>(Error.Forbidden("tenant.required", "A tenant context is required."));
+        }
+
+        var authorization = authorizer.Require(TenantPermission.ManageSubscription);
+        if (authorization.IsFailure)
+        {
+            return Result.Failure<SubscriptionDto>(authorization.Error!);
+        }
+
+        var subscription = await dbContext.Set<Subscription>()
+            .FirstOrDefaultAsync(candidate => candidate.TenantId == tenantId, cancellationToken);
+
+        if (subscription is null)
+        {
+            return Result.Failure<SubscriptionDto>(Error.NotFound(
+                "subscription.not_found",
+                "This tenant does not have a subscription."));
+        }
+
+        var plan = await dbContext.Set<Plan>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.Id == subscription.PlanId, cancellationToken);
+
+        if (plan is null)
+        {
+            return Result.Failure<SubscriptionDto>(Error.NotFound(
+                "plan.not_found",
+                "The subscription plan was not found."));
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var wasExpired = subscription.Status is SubscriptionStatus.Expired or SubscriptionStatus.Canceled;
+
+        if (!subscription.Reactivate(now, plan.MonthlyPrice == 0m))
+        {
+            return Result.Failure<SubscriptionDto>(Error.Conflict(
+                "subscription.not_reactivatable",
+                "This subscription cannot be reactivated in its current state."));
+        }
+
+        dbContext.Set<SubscriptionHistory>().Add(SubscriptionHistory.Create(
+            tenantId,
+            subscription.Id,
+            subscription.PlanId,
+            "subscription.reactivated",
+            subscription.Status,
+            note: wasExpired
+                ? "Subscription reactivated. A new period was started."
+                : "Scheduled cancellation cleared.",
+            occurredAt: now));
+
+        return Result.Success(await GetSubscriptionHandler.ToDtoAsync(subscription, dbContext, cancellationToken));
+    }
+}
+
+public sealed record GetSubscriptionHistoryQuery(int Page = 1, int PageSize = 25)
+    : IQuery<PagedResult<SubscriptionHistoryDto>>;
+
+public sealed class GetSubscriptionHistoryHandler(
+    IAppDbContext dbContext,
+    ITenantContext tenantContext,
+    ITenantAuthorizer authorizer)
+    : IQueryHandler<GetSubscriptionHistoryQuery, PagedResult<SubscriptionHistoryDto>>
+{
+    public async Task<Result<PagedResult<SubscriptionHistoryDto>>> Handle(
+        GetSubscriptionHistoryQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (tenantContext.TenantId is not { } tenantId)
+        {
+            return Result.Failure<PagedResult<SubscriptionHistoryDto>>(Error.Forbidden(
+                "tenant.required",
+                "A tenant context is required."));
+        }
+
+        var authorization = authorizer.Require(TenantPermission.ViewSubscription);
+        if (authorization.IsFailure)
+        {
+            return Result.Failure<PagedResult<SubscriptionHistoryDto>>(authorization.Error!);
+        }
+
+        var page = query.Page < 1 ? 1 : query.Page;
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+
+        var history = dbContext.Set<SubscriptionHistory>()
+            .AsNoTracking()
+            .Where(row => row.TenantId == tenantId);
+
+        var totalCount = await history.CountAsync(cancellationToken);
+        var rows = await history
+            .OrderByDescending(row => row.OccurredAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        var planIds = rows
+            .Select(row => row.PlanId)
+            .Concat(rows.Where(row => row.PreviousPlanId is not null).Select(row => row.PreviousPlanId!.Value))
+            .Distinct()
+            .ToList();
+
+        var plans = await dbContext.Set<Plan>()
+            .AsNoTracking()
+            .Where(plan => planIds.Contains(plan.Id))
+            .Select(plan => new { plan.Id, plan.Code, plan.Name })
+            .ToDictionaryAsync(plan => plan.Id, cancellationToken);
+
+        var items = rows
+            .Select(row => new SubscriptionHistoryDto(
+                row.Id,
+                row.Event,
+                row.Status,
+                plans.TryGetValue(row.PlanId, out var plan) ? plan.Code : string.Empty,
+                plans.TryGetValue(row.PlanId, out plan) ? plan.Name : string.Empty,
+                row.PreviousPlanId is { } previousPlanId && plans.TryGetValue(previousPlanId, out var previousPlan)
+                    ? previousPlan.Code
+                    : null,
+                row.Note,
+                row.OccurredAt))
+            .ToList();
+
+        return Result.Success(PagedResult<SubscriptionHistoryDto>.Create(items, page, pageSize, totalCount));
+    }
+}
+
 public sealed record RenewSubscriptionCommand(string IdempotencyKey) : ICommand<SubscriptionDto>;
 
 public sealed class RenewSubscriptionHandler(
     IAppDbContext dbContext,
-    ITenantContext tenantContext)
+    ITenantContext tenantContext,
+    ITenantAuthorizer authorizer)
     : ICommandHandler<RenewSubscriptionCommand, SubscriptionDto>
 {
     public async Task<Result<SubscriptionDto>> Handle(
@@ -259,12 +411,10 @@ public sealed class RenewSubscriptionHandler(
             return Result.Failure<SubscriptionDto>(Error.Forbidden("tenant.required", "A tenant context is required."));
         }
 
-        if (!TenantRoleRules.TryParse(tenantContext.Role, out var actorRole)
-            || !TenantRoleRules.CanManageTenant(actorRole))
+        var authorization = authorizer.Require(TenantPermission.ManageSubscription);
+        if (authorization.IsFailure)
         {
-            return Result.Failure<SubscriptionDto>(Error.Forbidden(
-                "tenant.forbidden",
-                "Only an owner or admin can renew the subscription."));
+            return Result.Failure<SubscriptionDto>(authorization.Error!);
         }
 
         var subscription = await dbContext.Set<Subscription>()
@@ -310,13 +460,21 @@ public sealed class RenewSubscriptionHandler(
 
 public sealed record GetEntitlementsQuery : IQuery<EntitlementsDto>;
 
-public sealed class GetEntitlementsHandler(IEntitlementService entitlements)
+public sealed class GetEntitlementsHandler(
+    IEntitlementService entitlements,
+    ITenantAuthorizer authorizer)
     : IQueryHandler<GetEntitlementsQuery, EntitlementsDto>
 {
     public async Task<Result<EntitlementsDto>> Handle(
         GetEntitlementsQuery query,
         CancellationToken cancellationToken)
     {
+        var authorization = authorizer.Require(TenantPermission.ViewUsage);
+        if (authorization.IsFailure)
+        {
+            return Result.Failure<EntitlementsDto>(authorization.Error!);
+        }
+
         var result = await entitlements.GetEntitlementsAsync(cancellationToken);
 
         return result is null
