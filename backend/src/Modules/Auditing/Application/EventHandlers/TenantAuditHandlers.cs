@@ -24,6 +24,30 @@ public sealed class TenantRenamedAuditHandler(IAuditLogRepository repository)
     }
 }
 
+public sealed class TenantSettingsUpdatedAuditHandler(IAuditLogRepository repository)
+    : IDomainEventHandler<TenantSettingsUpdated>
+{
+    public Task<Result> HandleAsync(TenantSettingsUpdated domainEvent, CancellationToken cancellationToken)
+    {
+        repository.Add(AuditLog.Create(
+            domainEvent.Actor,
+            "tenant.settings_updated",
+            "tenancy",
+            "Tenant",
+            domainEvent.TenantId,
+            "Workspace settings updated.",
+            new
+            {
+                domainEvent.BusinessContactEmail,
+                domainEvent.DefaultCurrency,
+                domainEvent.TimeZone
+            },
+            tenantId: domainEvent.TenantId));
+
+        return Task.FromResult(Result.Success());
+    }
+}
+
 public sealed class TenantMemberAddedAuditHandler(IAuditLogRepository repository)
     : IDomainEventHandler<TenantMemberAdded>
 {
@@ -75,6 +99,82 @@ public sealed class TenantMemberRemovedAuditHandler(IAuditLogRepository reposito
             domainEvent.UserId,
             $"Team member with the {domainEvent.Role} role removed.",
             new { domainEvent.UserId, domainEvent.Role },
+            tenantId: domainEvent.TenantId));
+
+        return Task.FromResult(Result.Success());
+    }
+}
+
+public sealed class TenantInvitationCreatedAuditHandler(IAuditLogRepository repository)
+    : IDomainEventHandler<TenantInvitationCreated>
+{
+    public Task<Result> HandleAsync(TenantInvitationCreated domainEvent, CancellationToken cancellationToken)
+    {
+        repository.Add(AuditLog.Create(
+            domainEvent.Actor,
+            "tenant.invitation_created",
+            "tenancy",
+            "TenantInvitation",
+            domainEvent.InvitationId,
+            $"Invitation created for {domainEvent.Email} with the {domainEvent.Role} role.",
+            new { domainEvent.Email, domainEvent.Role },
+            tenantId: domainEvent.TenantId));
+
+        return Task.FromResult(Result.Success());
+    }
+}
+
+public sealed class TenantInvitationResentAuditHandler(IAuditLogRepository repository)
+    : IDomainEventHandler<TenantInvitationResent>
+{
+    public Task<Result> HandleAsync(TenantInvitationResent domainEvent, CancellationToken cancellationToken)
+    {
+        repository.Add(AuditLog.Create(
+            domainEvent.Actor,
+            "tenant.invitation_resent",
+            "tenancy",
+            "TenantInvitation",
+            domainEvent.InvitationId,
+            $"Invitation resent to {domainEvent.Email}.",
+            new { domainEvent.Email, domainEvent.ExpiresAt },
+            tenantId: domainEvent.TenantId));
+
+        return Task.FromResult(Result.Success());
+    }
+}
+
+public sealed class TenantInvitationAcceptedAuditHandler(IAuditLogRepository repository)
+    : IDomainEventHandler<TenantInvitationAccepted>
+{
+    public Task<Result> HandleAsync(TenantInvitationAccepted domainEvent, CancellationToken cancellationToken)
+    {
+        repository.Add(AuditLog.Create(
+            domainEvent.Actor,
+            "tenant.invitation_accepted",
+            "tenancy",
+            "TenantInvitation",
+            domainEvent.InvitationId,
+            $"Invitation accepted with the {domainEvent.Role} role.",
+            new { domainEvent.UserId, domainEvent.Role },
+            tenantId: domainEvent.TenantId));
+
+        return Task.FromResult(Result.Success());
+    }
+}
+
+public sealed class TenantInvitationRevokedAuditHandler(IAuditLogRepository repository)
+    : IDomainEventHandler<TenantInvitationRevoked>
+{
+    public Task<Result> HandleAsync(TenantInvitationRevoked domainEvent, CancellationToken cancellationToken)
+    {
+        repository.Add(AuditLog.Create(
+            domainEvent.Actor,
+            "tenant.invitation_revoked",
+            "tenancy",
+            "TenantInvitation",
+            domainEvent.InvitationId,
+            $"Invitation to {domainEvent.Email} revoked.",
+            new { domainEvent.Email },
             tenantId: domainEvent.TenantId));
 
         return Task.FromResult(Result.Success());
