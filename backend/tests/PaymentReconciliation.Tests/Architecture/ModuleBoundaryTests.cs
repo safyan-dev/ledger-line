@@ -10,11 +10,12 @@ public sealed class ModuleBoundaryTests
     {
         ["Identity"] = ["SharedKernel", "Persistence.Abstractions"],
         ["Tenancy"] = ["SharedKernel", "Persistence.Abstractions", "Identity"],
-        ["Orders"] = ["SharedKernel", "Persistence.Abstractions"],
-        ["Payments"] = ["SharedKernel", "Persistence.Abstractions", "Orders"],
+        ["Orders"] = ["SharedKernel", "Persistence.Abstractions", "Tenancy"],
+        ["Payments"] = ["SharedKernel", "Persistence.Abstractions", "Orders", "Tenancy"],
         ["Webhooks"] = ["SharedKernel", "Persistence.Abstractions", "Payments"],
         ["Reconciliation"] = ["SharedKernel", "Persistence.Abstractions", "Orders", "Payments"],
-        ["Auditing"] = ["SharedKernel", "Persistence.Abstractions", "Tenancy", "Orders", "Payments", "Webhooks", "Reconciliation"],
+        ["Support"] = ["SharedKernel", "Persistence.Abstractions", "Tenancy"],
+        ["Auditing"] = ["SharedKernel", "Persistence.Abstractions", "Tenancy", "Orders", "Payments", "Webhooks", "Reconciliation", "Support"],
         ["Reporting"] = ["SharedKernel", "Persistence.Abstractions", "Orders", "Payments", "Webhooks", "Reconciliation", "Auditing"]
     };
 
@@ -27,7 +28,10 @@ public sealed class ModuleBoundaryTests
         ["ReconciliationRecord"] = "Reconciliation",
         ["AuditLog"] = "Auditing",
         ["Tenant"] = "Tenancy",
-        ["TenantUser"] = "Tenancy"
+        ["TenantUser"] = "Tenancy",
+        ["TenantInvitation"] = "Tenancy",
+        ["SupportTicket"] = "Support",
+        ["SupportTicketMessage"] = "Support"
     };
 
     [Fact]

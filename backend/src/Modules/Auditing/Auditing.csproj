@@ -10,6 +10,7 @@
     <ProjectReference Include="../Payments/Payments.csproj" />
     <ProjectReference Include="../Webhooks/Webhooks.csproj" />
     <ProjectReference Include="../Reconciliation/Reconciliation.csproj" />
+    <ProjectReference Include="../Support/Support.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FluentValidation" />

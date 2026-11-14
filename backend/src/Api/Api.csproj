@@ -11,6 +11,7 @@
     <ProjectReference Include="../Modules/Reporting/Reporting.csproj" />
     <ProjectReference Include="../Modules/Identity/Identity.csproj" />
     <ProjectReference Include="../Modules/Tenancy/Tenancy.csproj" />
+    <ProjectReference Include="../Modules/Support/Support.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
