@@ -395,6 +395,23 @@ Automatic matching never overpays an order: if allocating the payment would exce
 
 Refunds are recorded manually (no provider refund API in this build). A refund can be partial or full, cannot exceed the payment's refundable amount, and writes a `Refund` row, an audit entry, and — when the payment was allocated — reverses the same amount from the order's paid total, recomputing its status. Refunding an unallocated/queued payment leaves the order untouched.
 
+### Lifecycle state
+
+The app's durable workflows are aggregate-owned; there is no shared state-machine framework. The important lifecycle rules are:
+
+| Workflow | State and transition owner |
+|---|---|
+| Orders | `Order.Status` is derived from allocated payment totals; cancellation is terminal. See `Orders/Domain/Order.cs`. |
+| Payments and refunds | `Payment` moves among received, matched/unmatched, failed, and partial/full refund states; `Refund` is a recorded outcome, not a workflow. See `Payments/Domain/Payment.cs` and `Refund.cs`. |
+| Webhooks | Events move through received/processing to processed, ignored, failed, or conflict; failed events can be retried. Duplicate deliveries increment a counter without changing status. See `Webhooks/Domain/WebhookEvent.cs` and `Application/ProcessWebhookEvent.cs`. |
+| Subscriptions | Status is combined with cancellation-at-period-end and pending-plan/period fields; transitions are coordinated by the aggregate and expiry worker. See `Tenancy/Domain/Subscription.cs` and `Infrastructure/SubscriptionExpiryWorker.cs`. |
+| Invitations | Pending, accepted, revoked, and time-derived expiry; resend returns an expired invitation to pending. See `Tenancy/Domain/TenantInvitation.cs`. |
+| Support tickets | Legal status edges are centralized in `SupportTicketWorkflow`; status timestamps are maintained by the aggregate. See `Support/Domain/SupportTicket.cs`. |
+| Tenants, users, plans, refresh tokens | These use status/active/revocation fields rather than a complete transition graph. Tenant/user statuses are simple active/suspended flags; plans have an active flag; refresh-token activity is derived from expiry and revocation. |
+| Reconciliation | Outcomes are immutable attempt records, not a mutable lifecycle. Matching and retry behavior belongs to the reconciliation/payment commands. |
+
+In the client, TanStack Query owns request/mutation loading and error states; URL parameters own list filters and pagination. Local multi-step flows (sign-up, invitation acceptance, email change, and subscription confirmation) are component state. Model mutually exclusive actions as a discriminated union rather than separate booleans: payment match/refund dialogs follow this pattern on the dashboard and payment detail views, preventing impossible simultaneous-open states.
+
 ### Persistence
 
 - Single `AppDbContext`, one PostgreSQL schema per module (`orders`, `payments`, `webhooks`, `reconciliation`, `audit`).

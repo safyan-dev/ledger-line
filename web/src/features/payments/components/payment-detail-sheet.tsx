@@ -33,8 +33,7 @@ export function PaymentDetailSheet({
   paymentId: string | null
   onOpenChange: (open: boolean) => void
 }) {
-  const [matchOpen, setMatchOpen] = useState(false)
-  const [refundOpen, setRefundOpen] = useState(false)
+  const [activeAction, setActiveAction] = useState<'match' | 'refund' | null>(null)
   const queryClient = useQueryClient()
 
   const paymentQuery = useQuery({
@@ -140,7 +139,7 @@ export function PaymentDetailSheet({
                 </DetailList>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setRefundOpen(true)} disabled={!canRefund}>
+                  <Button variant="outline" size="sm" onClick={() => setActiveAction('refund')} disabled={!canRefund}>
                     <Undo2 className="size-3.5" aria-hidden />
                     Refund
                   </Button>
@@ -157,7 +156,7 @@ export function PaymentDetailSheet({
                     )}
                     Re-run matching
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setMatchOpen(true)} disabled={isMatched}>
+                  <Button variant="outline" size="sm" onClick={() => setActiveAction('match')} disabled={isMatched}>
                     <Link2 className="size-3.5" aria-hidden />
                     Link to order
                   </Button>
@@ -223,15 +222,15 @@ export function PaymentDetailSheet({
       </Sheet>
 
       <ManualMatchDialog
-        open={matchOpen}
-        onOpenChange={setMatchOpen}
+        open={activeAction === 'match'}
+        onOpenChange={(open) => setActiveAction(open ? 'match' : null)}
         paymentId={paymentId ?? undefined}
         paymentLabel={payment ? `${payment.providerPaymentId} · ${payment.customerName ?? 'Unknown customer'}` : undefined}
       />
 
       <RefundDialog
-        open={refundOpen}
-        onOpenChange={setRefundOpen}
+        open={activeAction === 'refund'}
+        onOpenChange={(open) => setActiveAction(open ? 'refund' : null)}
         paymentId={paymentId ?? undefined}
         maxAmount={payment?.refundableAmount ?? 0}
         currency={payment?.currency}

@@ -28,11 +28,13 @@ import { formatAmount, formatPercent } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { DashboardSummary, ReviewQueueItem } from '@/types/api'
 
+type ReviewQueueAction =
+  | { type: 'match'; item: ReviewQueueItem }
+  | { type: 'refund'; item: ReviewQueueItem }
+  | null
+
 export function DashboardPage() {
-  const [matchOpen, setMatchOpen] = useState(false)
-  const [matchTarget, setMatchTarget] = useState<ReviewQueueItem | null>(null)
-  const [refundOpen, setRefundOpen] = useState(false)
-  const [refundTarget, setRefundTarget] = useState<ReviewQueueItem | null>(null)
+  const [activeAction, setActiveAction] = useState<ReviewQueueAction>(null)
 
   const summary = useQuery({ queryKey: ['dashboard'], queryFn: getDashboardSummary })
   const amountMismatches = useQuery({
@@ -129,14 +131,8 @@ export function DashboardPage() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
         <ReviewQueue
           items={data.reviewQueue}
-          onMatch={(item) => {
-            setMatchTarget(item)
-            setMatchOpen(true)
-          }}
-          onRefund={(item) => {
-            setRefundTarget(item)
-            setRefundOpen(true)
-          }}
+          onMatch={(item) => setActiveAction({ type: 'match', item })}
+          onRefund={(item) => setActiveAction({ type: 'refund', item })}
         />
         <OperationalHealth data={data} mismatchCount={mismatchCount} />
       </div>
@@ -147,19 +143,31 @@ export function DashboardPage() {
       </div>
 
       <ManualMatchDialog
-        open={matchOpen}
-        onOpenChange={setMatchOpen}
-        paymentId={matchTarget?.paymentId}
-        paymentLabel={matchTarget ? `${matchTarget.providerPaymentId} · ${formatMoneyLabel(matchTarget)}` : undefined}
+        open={activeAction?.type === 'match'}
+        onOpenChange={(open) => {
+          if (!open) setActiveAction((current) => current?.type === 'match' ? null : current)
+        }}
+        paymentId={activeAction?.type === 'match' ? activeAction.item.paymentId : undefined}
+        paymentLabel={
+          activeAction?.type === 'match'
+            ? `${activeAction.item.providerPaymentId} · ${formatMoneyLabel(activeAction.item)}`
+            : undefined
+        }
       />
 
       <RefundDialog
-        open={refundOpen}
-        onOpenChange={setRefundOpen}
-        paymentId={refundTarget?.paymentId}
-        maxAmount={refundTarget?.amount ?? 0}
-        currency={refundTarget?.currency}
-        paymentLabel={refundTarget ? `${refundTarget.providerPaymentId} · ${formatMoneyLabel(refundTarget)}` : undefined}
+        open={activeAction?.type === 'refund'}
+        onOpenChange={(open) => {
+          if (!open) setActiveAction((current) => current?.type === 'refund' ? null : current)
+        }}
+        paymentId={activeAction?.type === 'refund' ? activeAction.item.paymentId : undefined}
+        maxAmount={activeAction?.type === 'refund' ? activeAction.item.amount : 0}
+        currency={activeAction?.type === 'refund' ? activeAction.item.currency : undefined}
+        paymentLabel={
+          activeAction?.type === 'refund'
+            ? `${activeAction.item.providerPaymentId} · ${formatMoneyLabel(activeAction.item)}`
+            : undefined
+        }
       />
     </>
   )

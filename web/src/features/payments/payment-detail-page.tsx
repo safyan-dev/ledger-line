@@ -47,8 +47,7 @@ import {
 export function PaymentDetailPage() {
   const { paymentId = '' } = useParams()
   const queryClient = useQueryClient()
-  const [matchOpen, setMatchOpen] = useState(false)
-  const [refundOpen, setRefundOpen] = useState(false)
+  const [activeAction, setActiveAction] = useState<'match' | 'refund' | null>(null)
 
   const paymentQuery = useQuery({
     queryKey: ['payments', paymentId],
@@ -139,7 +138,7 @@ export function PaymentDetailPage() {
         description={`${payment.provider} · ${payment.providerPaymentId}`}
         actions={
           <>
-            <Button variant="outline" onClick={() => setRefundOpen(true)} disabled={!canRefund}>
+            <Button variant="outline" onClick={() => setActiveAction('refund')} disabled={!canRefund}>
               <Undo2 className="size-4" aria-hidden />
               Refund
             </Button>
@@ -151,7 +150,7 @@ export function PaymentDetailPage() {
               )}
               Re-run matching
             </Button>
-            <Button variant="outline" onClick={() => setMatchOpen(true)} disabled={isMatched}>
+            <Button variant="outline" onClick={() => setActiveAction('match')} disabled={isMatched}>
               <Link2 className="size-4" aria-hidden />
               Link to order
             </Button>
@@ -400,7 +399,7 @@ export function PaymentDetailPage() {
                 title="Not linked to an order"
                 description="Use Link to order to attach this payment after review."
                 action={
-                  <Button variant="outline" size="sm" onClick={() => setMatchOpen(true)}>
+                  <Button variant="outline" size="sm" onClick={() => setActiveAction('match')}>
                     <Link2 className="size-3.5" aria-hidden />
                     Link to order
                   </Button>
@@ -459,15 +458,15 @@ export function PaymentDetailPage() {
       </div>
 
       <ManualMatchDialog
-        open={matchOpen}
-        onOpenChange={setMatchOpen}
+        open={activeAction === 'match'}
+        onOpenChange={(open) => setActiveAction(open ? 'match' : null)}
         paymentId={payment.id}
         paymentLabel={`${payment.providerPaymentId} · ${payment.customerName ?? 'Unknown customer'}`}
       />
 
       <RefundDialog
-        open={refundOpen}
-        onOpenChange={setRefundOpen}
+        open={activeAction === 'refund'}
+        onOpenChange={(open) => setActiveAction(open ? 'refund' : null)}
         paymentId={payment.id}
         maxAmount={payment.refundableAmount}
         currency={payment.currency}
