@@ -119,19 +119,7 @@ curl -s -X POST localhost:5080/api/auth/login \
 
 Tenant APIs require a JWT **and** a resolvable tenant. Health checks, `POST /api/webhooks/{provider}`, `/api/auth/*`, `/api/platform/*` and `/api/tenants/register` are tenant-agnostic; platform endpoints additionally require the `PlatformAdmin` policy.
 
-| Route | Module | Purpose |
-|---|---|---|
-| `POST /api/auth/register` | Identity | Create a user + tokens |
-| `POST /api/auth/login` | Identity | Email + password + optional `tenantSlug` → tokens; slug is required for tenant users and optional for platform admins |
-| `POST /api/auth/refresh` | Identity | Rotate refresh token |
-| `POST /api/auth/logout` | Identity | Revoke refresh token |
-| `GET /api/auth/me` | Identity | Current user |
-| `POST /api/auth/change-password` | Identity | Change password, revokes sessions |
-| `POST /api/auth/forgot-password` | Identity | Always `200`; dev response includes the reset token |
-| `POST /api/auth/reset-password` | Identity | Consume reset token, revokes sessions |
-| `POST /api/tenants/register` | Tenancy | Create tenant + owner membership + tokens |
-| `GET /api/tenants/mine` | Tenancy | Current user's memberships |
-| `GET /api/platform/tenants` | Tenancy | Platform admin: list workspaces (no tenant context) |
+Identity routes are under `/api/auth`; tenant and membership routes are under `/api/tenants`. Invitation and platform administration routes are under `/api/invitations` and `/api/platform`.
 
 Plans, features and limits are database-backed and seeded idempotently at startup. New tenants get Free by default; a selected Growth/Business plan is stored as a simulated activation with `paymentConfirmed = false` because no payment is collected. Subscription changes write history and audit rows; an hourly worker applies due downgrades and expires due subscriptions without deleting tenant data.
 
@@ -425,43 +413,18 @@ In the client, TanStack Query owns request/mutation loading and error states; UR
 
 ### API surface
 
-| Method | Route |
+| Module | Main routes |
 |---|---|
-| POST | `/api/auth/register` · `/api/auth/login` · `/api/auth/refresh` · `/api/auth/logout` · `/api/auth/change-password` · `/api/auth/forgot-password` · `/api/auth/reset-password` |
-| GET | `/api/auth/me` |
-| POST | `/api/tenants/register` — optional `planCode`, defaults to Free |
-| GET | `/api/tenants/mine` |
-| GET/PUT | `/api/tenants/current` — name, business contact email, default currency, time zone; update is Owner/TenantAdmin |
-| GET/POST | `/api/tenants/current/members` · PATCH/DELETE `/api/tenants/current/members/{userId}` |
-| GET/POST | `/api/tenants/current/invitations` · POST `/api/tenants/current/invitations/{id}/resend` · `/revoke` |
-| POST | `/api/invitations/accept` (anonymous or authenticated) |
-| GET/PUT | `/api/tenants/current/subscription` — upgrade is immediate, downgrade is scheduled |
-| POST | `/api/tenants/current/subscription/cancel` · `/renew` (idempotent) · `/reactivate` |
-| GET | `/api/tenants/current/subscription/history` |
-| GET | `/api/tenants/current/entitlements` · `/api/usage` · `/api/usage/features/{featureKey}` |
-| GET/PATCH | `/api/account/profile` · POST `/api/account/change-email` · `/change-email/confirm` |
-| POST/GET | `/api/support/tickets` · GET `/api/support/tickets/{id}` · POST `/{id}/messages` · PATCH `/{id}/status` |
-| GET | `/api/plans` (anonymous, database-backed) |
-| GET | `/api/platform/tenants` (platform admin, no tenant context) |
-| GET | `/api/dashboard/summary` |
-| GET/POST | `/api/orders` (JWT) · supports `status`, `search`, `sort` |
-| GET | `/api/orders/{id}` |
-| POST | `/api/orders/{id}/cancel` |
-| GET/POST | `/api/payments` |
-| GET | `/api/payments/{id}` |
-| POST | `/api/webhooks/{provider}` (anonymous, HMAC + tenant subdomain) |
-| GET | `/api/webhooks` · `/api/webhooks/{id}` · supports `paymentId` |
-| GET | `/api/reconciliation` · `/api/reconciliation/payment/{paymentId}` · supports `outcome`, `search`, `reason`, `from`, `to` |
-| POST | `/api/reconciliation/manual-match` |
-| POST | `/api/payments/{id}/link` · `/api/payments/{id}/reconcile` |
-| POST/GET | `/api/payments/{id}/refunds` |
-| POST | `/api/webhooks/{id}/reprocess` — retry a plan-limit-failed event |
-| GET | `/api/audit-logs` |
-| GET | `/health` |
-
-Paging is `page`/`pageSize` (max 100) returning `items`, `page`, `pageSize`, `totalCount`, `totalPages`.
-
-Dashboard flow counters are **all-time**: orders, webhooks, recorded payments, successful payments (everything except `Failed`), currently `Matched` payments, currently `Unmatched`/pending-review payments, and manual matches. `matchedRate7d` is calculated from reconciliation outcomes in the last seven days.
+| Identity and tenancy | `/api/auth`, `/api/tenants` |
+| Orders | `/api/orders` |
+| Payments | `/api/payments` |
+| Webhooks | `/api/webhooks` |
+| Reconciliation | `/api/reconciliation` |
+| Reporting | `/api/dashboard` |
+| Auditing | `/api/audit-logs` |
+| Support | `/api/support` |
+| Plans and usage | `/api/plans`, `/api/usage` |
+| Health | `/health` |
 
 ## Client
 
@@ -499,43 +462,3 @@ web/src/
 - `GET /api/plans` is anonymous and is the only source of plan names, features and limits; nothing is hardcoded in the client.
 - Auth is stored client-side; the API client attaches `Authorization` and `X-Tenant-Slug`, and refreshes once on `401`.
 - `ReconciliationDiagram` animates with CSS only and is disabled under `prefers-reduced-motion`.
-
-### Scripts
-
-```bash
-npm run dev      # Vite dev server, /api proxied to :5080
-npm run build    # tsc -b && vite build
-npm run lint     # oxlint
-
-# webhook simulator (repo root)
-node scripts/simulate-webhooks.mjs --scenario all
-```
-
-## Deliberate omissions
-
-- **Webhook ingress is a CLI simulator, not a provider UI.** `scripts/simulate-webhooks.mjs` covers the scenarios; there is no browser payload generator.
-- **In-memory ingress queue.** The <5 ms ack is achieved by acknowledging before persistence. A crash can lose queued events; there is no outbox/broker. Stored events stuck in `Received/Processing` are failed by a recovery sweep. Only plan-limit failures can be reprocessed (`POST /api/webhooks/{id}/reprocess`); there is no general replay endpoint.
-- **No real payment provider.** Plans use manual/simulated activation; no invoices, gateway calls or card data are involved. Email delivery is a logging sender; a real provider can replace `IEmailSender`.
-- **No Kafka/RabbitMQ, no outbox.** In-process events inside the command transaction are sufficient at this scale and keep the failure mode obvious.
-- **No refunds via a payment provider.** Refunds are recorded manually as succeeded (no Stripe refund call, no refund webhooks), and there are no refund approval roles. Partial manual splits, FX conversion and dark mode are also omitted (tokens are in place for dark mode).
-- **No click-to-sort on tables yet.** Lists support server-side filtering and pagination; sorting is a follow-up API/UI addition.
-- **Order detail is composed client-side** from the order, payments and reconciliation endpoints (three parallel queries) rather than one aggregate read endpoint.
-- **Customer-reference uniqueness is enforced in the create-order handler plus a lookup index**, not a database unique constraint, because pre-existing dev rows can contain duplicates. After cleaning those rows, the index can be made unique.
-
-## Manual acceptance checklist
-
-1. Dashboard numbers match the database; the flow counts and chart render.
-2. A signed webhook returns `202` with `X-Webhook-Ack-Ms` under 5 ms, and the payment/order update asynchronously.
-3. Replaying the same event id with the same payload returns `202`, increments `duplicateCount`, and creates no second payment; a mutated replay increments `conflictCount`.
-4. Unknown event types are `Ignored`; events with no identifier (orderId/reference/customerReference) and invalid payloads are `Failed`; bad signatures return `401` and store nothing.
-5. `payment.failed` records a `Failed` payment without allocating to the order; `node scripts/simulate-webhooks.mjs --scenario all` passes all 13 scenarios.
-6. `--scenario e2e` passes E2E-01..E2E-06: normal payment, four duplicate deliveries, amount mismatch, unknown order, failure/retry, and late-arriving order.
-7. A payment arriving before its order stays `Unmatched` and visible; creating the order and re-running reconciliation matches it.
-8. A $90 payment against a $100 order produces `AmountMismatch`, leaves the order `Pending`, and appears in the mismatch filter and review queue.
-9. Ten simultaneous re-runs of one unmatched payment produce exactly one successful reconciliation record and allocate the amount once (`409` for the rest).
-10. An unmatched payment appears in the review queue; manual match updates the order, payment and audit log.
-11. Order detail shows multiple payment attempts and the reconciliation trail; cancel is blocked once money is allocated.
-12. Refund a matched payment partially, then fully: the payment shows `PartiallyRefunded`/`Refunded`, the order's paid amount reverses and its status recomputes, and audit entries `refund.recorded` / `order.payment_reversed` appear. An over-refund returns `409`.
-13. Refund a queued overpayment: the payment leaves the review queue as `Refunded` and the order is untouched.
-14. Filters and pagination survive a reload; empty, loading and error states are reachable.
-15. Keyboard-only pass through navigation, filters, manual match/refund and confirmation dialogs.
