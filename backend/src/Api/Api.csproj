@@ -1,4 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>ledgerline-api-2f4c9e1a-7b3d-4c8e-9a1f-6d2b5e8c0a13</UserSecretsId>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../SharedKernel/SharedKernel.csproj" />
     <ProjectReference Include="../Persistence.Abstractions/Persistence.Abstractions.csproj" />

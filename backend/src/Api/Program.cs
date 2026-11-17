@@ -71,6 +71,7 @@ builder.Services.AddCors(options => options.AddPolicy("web", policy => policy
     .AllowAnyMethod()));
 
 var app = builder.Build();
+var seedDemoData = app.Configuration.GetValue("Database:SeedDemoData", false);
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
@@ -123,7 +124,7 @@ if (app.Environment.IsDevelopment())
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await dbContext.Database.MigrateAsync();
 
-    if (app.Configuration.GetValue("Database:SeedDemoData", true))
+    if (seedDemoData)
     {
         await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().SeedAsync();
     }
@@ -134,7 +135,7 @@ await using (var planScope = app.Services.CreateAsyncScope())
     await planScope.ServiceProvider.GetRequiredService<PlanSeeder>().SeedAsync();
 }
 
-if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Database:SeedDemoData", true))
+if (app.Environment.IsDevelopment() && seedDemoData)
 {
     await using var demoScope = app.Services.CreateAsyncScope();
     await demoScope.ServiceProvider.GetRequiredService<DemoDataSeeder>().EnsureDemoSubscriptionAsync();

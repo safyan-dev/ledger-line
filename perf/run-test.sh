@@ -6,7 +6,7 @@ REPO_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 TYPE=${1:-baseline}
 RUN_ID=${2:-perf-$(date +%Y%m%d%H%M%S)}
 API_URL=${PERF_API_URL:-http://localhost:5082}
-WEBHOOK_SECRET=${WEBHOOK_SECRET:-whsec_dev_ledgerline}
+WEBHOOK_SECRET=${WEBHOOK_SECRET:-whsec_perf_local}
 PROMETHEUS_URL=${PROMETHEUS_URL:-http://localhost:9090}
 OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-ledgerline-api-perf}
 K6_BIN=${K6_BIN:-k6}

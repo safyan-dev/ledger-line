@@ -8,6 +8,9 @@ export ASPNETCORE_ENVIRONMENT=Development
 export ASPNETCORE_URLS=http://localhost:5082
 export ConnectionStrings__Database="Host=localhost;Port=5433;Database=payment_reconciliation_perf;Username=postgres;Password=postgres"
 export Database__SeedDemoData=false
+export Jwt__SigningKey="${JWT_SIGNING_KEY:-perf-only-ledgerline-signing-key-change-me-32+chars}"
+export Webhooks__SigningSecret="${WEBHOOK_SECRET:-whsec_perf_local}"
+export Webhooks__Providers__mock__SigningSecret="${WEBHOOK_SECRET:-whsec_perf_local}"
 export OTEL_SERVICE_NAME="${OTEL_SERVICE_NAME:-ledgerline-api-perf}"
 export Observability__OtlpEndpoint="${Observability__OtlpEndpoint:-http://localhost:4317}"
 

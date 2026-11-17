@@ -105,7 +105,57 @@ docker compose up -d
 
 This starts PostgreSQL, pgAdmin, and the observability services.
 
-### 2. Run the backend
+### 2. Configure local secrets
+
+Local secrets are stored with .NET user-secrets and are never committed. Run the setup script for your shell:
+
+```bash
+./backend/tools/setup-dev-secrets.sh
+```
+
+```powershell
+./backend/tools/setup-dev-secrets.ps1
+```
+
+The script keeps existing values and fills in missing ones. It configures:
+
+| Key | Purpose |
+|---|---|
+| `ConnectionStrings:Database` | Local PostgreSQL connection |
+| `Jwt:SigningKey` | Access-token signing key |
+| `Webhooks:SigningSecret` | Fallback webhook signing secret |
+| `Webhooks:Providers:mock:SigningSecret` | Mock provider secret |
+| `Webhooks:Providers:stripe:SigningSecret` | Stripe-shaped provider secret |
+| `Demo:Password` | Local demo owner password |
+| `Demo:PlatformPassword` | Local platform owner password |
+
+Override any generated value with `DB_CONNECTION`, `JWT_SIGNING_KEY`, `WEBHOOK_SIGNING_SECRET`, `WEBHOOK_MOCK_SECRET`, `WEBHOOK_STRIPE_SECRET`, `DEMO_PASSWORD`, or `PLATFORM_PASSWORD`.
+
+The script prints the local demo credentials. Defaults are:
+
+| Account | Credentials |
+|---|---|
+| Demo owner | `avery.chen@ledgerline.local` / `Demo123!ChangeMe` |
+| Platform owner | `platform@ledgerline.local` / `Platform123!ChangeMe` |
+| Demo tenant | `demo` subdomain |
+
+These are local-only values. Deployed environments must use environment variables or a secret store:
+
+```text
+ConnectionStrings__Database
+Jwt__SigningKey
+Webhooks__SigningSecret
+Webhooks__Providers__mock__SigningSecret
+Webhooks__Providers__stripe__SigningSecret
+Demo__Password
+Demo__PlatformPassword
+```
+
+`appsettings.json` contains no secrets. User-secrets are plaintext local storage and are not suitable for production.
+
+For design-time EF commands such as `dotnet ef`, export `ConnectionStrings__Database` first; runtime configuration uses user-secrets in Development.
+
+### 3. Run the backend
 
 ```bash
 cd backend
@@ -118,7 +168,7 @@ API: `http://localhost:5080`
 
 API documentation: `http://localhost:5080/scalar`
 
-### 3. Run the frontend
+### 4. Run the frontend
 
 ```bash
 cd web
@@ -129,7 +179,7 @@ npm run dev
 
 Frontend: `http://localhost:5173`
 
-The API applies migrations and seeds development data on startup.
+The API applies migrations on startup. Development seeds demo data only when `Database:SeedDemoData` is `true`, which the Development settings enable explicitly.
 
 ## Testing
 
@@ -144,6 +194,12 @@ dotnet test tests/PaymentReconciliation.Tests/PaymentReconciliation.Tests.csproj
 The tests use PostgreSQL through Testcontainers and cover business workflows, authorization, tenant isolation, subscription limits, and concurrent operations.
 
 ### Webhook Simulation
+
+The simulator needs the local mock-provider secret from user-secrets:
+
+```bash
+export WEBHOOK_SECRET="$(dotnet user-secrets list --project backend/src/Api | sed -n 's/^Webhooks:Providers:mock:SigningSecret = //p')"
+```
 
 Run the webhook scenarios:
 

@@ -14,8 +14,12 @@ public static class PersistenceRegistration
 {
     public static IServiceCollection AddPersistence(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("Database")
-                               ?? "Host=localhost;Port=5432;Database=payment_reconciliation;Username=postgres;Password=postgres";
+        var connectionString = configuration.GetConnectionString("Database");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "ConnectionStrings:Database is not configured. Run backend/tools/setup-dev-secrets.sh (or .ps1) or set ConnectionStrings__Database.");
+        }
 
         var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString)
         {

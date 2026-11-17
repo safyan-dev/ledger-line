@@ -1,5 +1,5 @@
 export const API_URL = (__ENV.PERF_API_URL || 'http://localhost:5082').replace(/\/$/, '');
-export const WEBHOOK_SECRET = __ENV.WEBHOOK_SECRET || 'whsec_dev_ledgerline';
+export const WEBHOOK_SECRET = __ENV.WEBHOOK_SECRET || 'whsec_perf_local';
 export const RUN_ID = __ENV.PERF_RUN_ID || 'local';
 export const THINK_TIME = Number(__ENV.PERF_THINK_TIME || 1);
 export const PAGE_SIZE = Number(__ENV.PERF_PAGE_SIZE || 25);

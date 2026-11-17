@@ -272,6 +272,6 @@ public sealed class TenantUser : AggregateRoot
         Raise(new TenantMemberRoleChanged(TenantId, UserId, previousRole.ToString(), role.ToString(), actor));
     }
 
-    public void Remove(AuditActor actor) 
+    public void Remove(AuditActor actor)
         => Raise(new TenantMemberRemoved(TenantId, UserId, Role.ToString(), actor));
 }

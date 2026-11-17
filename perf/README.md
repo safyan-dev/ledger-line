@@ -76,7 +76,7 @@ The baseline measurement is documented in [`RESULTS.md`](./RESULTS.md). No perfo
 
 ```bash
 PERF_API_URL=http://localhost:5082
-WEBHOOK_SECRET=whsec_dev_ledgerline
+WEBHOOK_SECRET=whsec_perf_local
 PERF_RUN_ID=perf-load-002
 PERF_THINK_TIME=1
 PERF_PAGE_SIZE=25
@@ -91,7 +91,7 @@ The runner is preferred because it also samples infrastructure and checks consis
 ```bash
 PERF_RUN_ID=perf-load-manual \
 PERF_API_URL=http://localhost:5082 \
-WEBHOOK_SECRET=whsec_dev_ledgerline \
+WEBHOOK_SECRET=whsec_perf_local \
 PERF_TEST_TYPE=load \
 k6 run perf/k6/load.js
 ```

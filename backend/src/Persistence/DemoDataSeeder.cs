@@ -307,7 +307,7 @@ public sealed class DemoDataSeeder(
             CreatedAt = DateTimeOffset.UtcNow
         };
 
-        var password = configuration["Demo:PlatformPassword"] ?? "Platform123!ChangeMe";
+        var password = RequiredSetting("Demo:PlatformPassword");
         var createResult = await userManager.CreateAsync(user, password);
         if (!createResult.Succeeded)
         {
@@ -400,7 +400,7 @@ public sealed class DemoDataSeeder(
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
-            var password = configuration["Demo:Password"] ?? "Demo123!ChangeMe";
+            var password = RequiredSetting("Demo:Password");
             var createResult = await userManager.CreateAsync(user, password);
             if (!createResult.Succeeded)
             {
@@ -422,6 +422,18 @@ public sealed class DemoDataSeeder(
         }
 
         return tenant;
+    }
+
+    private string RequiredSetting(string key)
+    {
+        var value = configuration[key];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException(
+                $"{key} is not configured. Run backend/tools/setup-dev-secrets.sh (or .ps1) before seeding demo data.");
+        }
+
+        return value;
     }
 
     private static DateTimeOffset DaysAgo(DateTimeOffset now, int days, int hour = 9)
