@@ -58,6 +58,7 @@ export function SignUpPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [slugTouched, setSlugTouched] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [verification, setVerification] = useState<{ email: string; token: string | null } | null>(null)
   const [selectedPlan] = useState<SelectedPlan | null>(() => {
     const code = params.get('plan')
     const stored = getSelectedPlan()
@@ -95,6 +96,11 @@ export function SignUpPage() {
         planCode: selectedPlan?.code,
       })
 
+      if (!response.session) {
+        setVerification({ email: values.email, token: response.emailVerificationToken })
+        return
+      }
+
       queryClient.clear()
       saveSession({
         accessToken: response.session.accessToken,
@@ -115,6 +121,39 @@ export function SignUpPage() {
       setFormError(errorMessage(error))
     }
   })
+
+  if (verification) {
+    return (
+      <div className="space-y-6">
+        <div className="flex size-11 items-center justify-center rounded-full bg-success/15 text-success">
+          <CircleCheck className="size-5" aria-hidden />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Check your email</h1>
+          <p className="text-sm leading-6 text-muted-foreground">
+            We sent a confirmation link to <span className="font-medium text-foreground">{verification.email}</span>.
+            Confirm your address before signing in.
+          </p>
+        </div>
+        {verification.token ? (
+          <Button asChild className="w-full" size="lg">
+            <Link
+              to={`/confirm-email?email=${encodeURIComponent(verification.email)}&token=${encodeURIComponent(verification.token)}`}
+            >
+              Verify email now
+              <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </Button>
+        ) : null}
+        <p className="text-center text-sm text-muted-foreground">
+          Already confirmed?{' '}
+          <Link to="/sign-in" className="font-medium text-primary hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">

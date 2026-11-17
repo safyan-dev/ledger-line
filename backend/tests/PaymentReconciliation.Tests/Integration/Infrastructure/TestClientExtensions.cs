@@ -25,16 +25,41 @@ public static class TestClientExtensions
 
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        var session = body.GetProperty("session");
         var tenant = body.GetProperty("tenant");
-        var accessToken = session.GetProperty("accessToken").GetString()!;
+        var tenantId = tenant.GetProperty("id").GetGuid();
+        var tenantSlug = tenant.GetProperty("slug").GetString()!;
+        var email = $"owner@{tenantSlug}.test";
 
-        return new TestSession(
-            accessToken,
-            session.GetProperty("refreshToken").GetString()!,
-            tenant.GetProperty("id").GetGuid(),
-            tenant.GetProperty("slug").GetString()!,
-            await client.GetUserIdAsync(accessToken));
+        if (body.TryGetProperty("session", out var session)
+            && session.ValueKind != JsonValueKind.Null)
+        {
+            var accessToken = session.GetProperty("accessToken").GetString()!;
+            return new TestSession(
+                accessToken,
+                session.GetProperty("refreshToken").GetString()!,
+                tenantId,
+                tenantSlug,
+                await client.GetUserIdAsync(accessToken));
+        }
+
+        var token = body.GetProperty("emailVerificationToken").GetString();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            var resend = await client.PostAsJsonAsync("/api/auth/resend-confirmation", new { email });
+            resend.EnsureSuccessStatusCode();
+            var resendBody = await resend.Content.ReadFromJsonAsync<JsonElement>();
+            token = resendBody.GetProperty("verificationToken").GetString();
+        }
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new InvalidOperationException("The test API did not return an email verification token.");
+        }
+
+        var confirm = await client.PostAsJsonAsync("/api/auth/confirm-email", new { email, token });
+        confirm.EnsureSuccessStatusCode();
+
+        return await client.LoginAsync(email, tenantId, tenantSlug);
     }
 
     public static async Task<TestSession> LoginAsync(this HttpClient client, string email, Guid tenantId, string tenantSlug)

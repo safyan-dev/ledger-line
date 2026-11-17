@@ -16,13 +16,18 @@ public sealed record IssuedSession(
     DateTimeOffset RefreshTokenExpiresAt,
     IdentityUser User);
 
+public sealed record CreatedIdentityUser(
+    IdentityUser User,
+    string? EmailVerificationToken);
+
 public interface IIdentityFacade
 {
-    Task<Result<IdentityUser>> CreateUserAsync(
+    Task<Result<CreatedIdentityUser>> CreateUserAsync(
         string email,
         string password,
         string displayName,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool emailConfirmed = false);
 
     Task<Result<IdentityUser>> VerifyCredentialsAsync(
         string email,

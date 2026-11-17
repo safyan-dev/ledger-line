@@ -8,6 +8,7 @@ export ASPNETCORE_ENVIRONMENT=Development
 export ASPNETCORE_URLS=http://localhost:5082
 export ConnectionStrings__Database="Host=localhost;Port=5433;Database=payment_reconciliation_perf;Username=postgres;Password=postgres"
 export Database__SeedDemoData=false
+export RateLimiting__AuthPermitLimit="${RATE_LIMIT_AUTH_PERMIT_LIMIT:-10000}"
 export Jwt__SigningKey="${JWT_SIGNING_KEY:-perf-only-ledgerline-signing-key-change-me-32+chars}"
 export Webhooks__SigningSecret="${WEBHOOK_SECRET:-whsec_perf_local}"
 export Webhooks__Providers__mock__SigningSecret="${WEBHOOK_SECRET:-whsec_perf_local}"

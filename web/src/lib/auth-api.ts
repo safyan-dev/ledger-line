@@ -47,13 +47,15 @@ export type RegisterTenantResponse = {
     accessTokenExpiresAt: string
     refreshTokenExpiresAt: string
     user: AuthUser
-  }
+  } | null
   tenant: {
     id: string
     name: string
     slug: string
     role: string
   }
+  emailVerificationRequired: boolean
+  emailVerificationToken: string | null
 }
 
 export type ForgotPasswordResponse = {
@@ -75,6 +77,20 @@ export function registerTenantRequest(payload: RegisterTenantPayload): Promise<R
   return apiRequest<RegisterTenantResponse>('/tenants/register', {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export function confirmEmail(email: string, token: string): Promise<AuthUser> {
+  return apiRequest<AuthUser>('/auth/confirm-email', {
+    method: 'POST',
+    body: JSON.stringify({ email, token }),
+  })
+}
+
+export function resendConfirmation(email: string): Promise<{ verificationToken: string | null }> {
+  return apiRequest<{ verificationToken: string | null }>('/auth/resend-confirmation', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
   })
 }
 

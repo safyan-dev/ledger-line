@@ -60,14 +60,14 @@ public sealed class TenantRegistrationService(
 
         var now = DateTimeOffset.UtcNow;
         var tenant = Tenant.Create(request.CompanyName, slug, now);
-        var membership = TenantUser.Create(tenant.Id, user.Value.Id, TenantRole.Owner);
+        var membership = TenantUser.Create(tenant.Id, user.Value.User.Id, TenantRole.Owner);
 
         tenantContext.Set(new TenantContextSnapshot(
             tenant.Id,
             tenant.Slug,
-            user.Value.Id,
+            user.Value.User.Id,
             TenantRole.Owner.ToString(),
-            user.Value.IsPlatformAdmin));
+            user.Value.User.IsPlatformAdmin));
 
         dbContext.Set<Tenant>().Add(tenant);
         dbContext.Set<TenantUser>().Add(membership);
@@ -88,24 +88,32 @@ public sealed class TenantRegistrationService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var session = await identity.IssueSessionAsync(user.Value.Id, cancellationToken);
-        if (session.IsFailure)
+        TenantSessionDto? session = null;
+        if (user.Value.User.EmailConfirmed)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            return Result.Failure<RegisterTenantResponse>(session.Error!);
+            var issued = await identity.IssueSessionAsync(user.Value.User.Id, cancellationToken);
+            if (issued.IsFailure)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Result.Failure<RegisterTenantResponse>(issued.Error!);
+            }
+
+            session = new TenantSessionDto(
+                issued.Value.AccessToken,
+                issued.Value.RefreshToken,
+                issued.Value.AccessTokenExpiresAt,
+                issued.Value.RefreshTokenExpiresAt,
+                issued.Value.User);
         }
 
         await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(new RegisterTenantResponse(
-            new TenantSessionDto(
-                session.Value.AccessToken,
-                session.Value.RefreshToken,
-                session.Value.AccessTokenExpiresAt,
-                session.Value.RefreshTokenExpiresAt,
-                session.Value.User),
+            session,
             new TenantDto(tenant.Id, tenant.Name, tenant.Slug, membership.Role.ToString()),
             plan.Code,
-            plan.Name));
+            plan.Name,
+            EmailVerificationRequired: !user.Value.User.EmailConfirmed,
+            EmailVerificationToken: user.Value.EmailVerificationToken));
     }
 }

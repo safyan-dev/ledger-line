@@ -72,8 +72,12 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
 
         var reuse = await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = session.RefreshToken });
         var newToken = rotated.GetProperty("accessToken").GetString();
+        var rotatedRefreshToken = rotated.GetProperty("refreshToken").GetString();
 
         Assert.Equal(HttpStatusCode.Unauthorized, reuse.StatusCode);
+
+        var afterReuse = await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = rotatedRefreshToken });
+        Assert.Equal(HttpStatusCode.Unauthorized, afterReuse.StatusCode);
 
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/orders");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", newToken);
@@ -89,9 +93,11 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
 
         var logout = await client.PostAsJsonAsync("/api/auth/logout", new { refreshToken = session.RefreshToken });
         var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = session.RefreshToken });
+        var me = await client.SendAsync(client.Authorized(HttpMethod.Get, "/api/auth/me", session));
 
         Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, me.StatusCode);
     }
 
     [Fact]
@@ -107,6 +113,36 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
         });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Repeated_failed_logins_lock_the_account()
+    {
+        var client = factory.CreateClient();
+        var session = await client.RegisterTenantAsync($"lockout-" + Guid.NewGuid().ToString("N")[..10]);
+        var email = $"owner@{session.TenantSlug}.test";
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var failed = await client.PostAsJsonAsync("/api/auth/login", new
+            {
+                email,
+                password = "WrongPass123!",
+                tenantSlug = session.TenantSlug
+            });
+            Assert.Equal(HttpStatusCode.Unauthorized, failed.StatusCode);
+        }
+
+        var locked = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "TenantPass123!",
+            tenantSlug = session.TenantSlug
+        });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, locked.StatusCode);
+        var body = await locked.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("auth.account_locked", body.GetProperty("code").GetString());
     }
 
     [Fact]
@@ -130,7 +166,9 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
         Assert.Equal(HttpStatusCode.NoContent, changed.StatusCode);
 
         var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = session.RefreshToken });
+        var me = await client.SendAsync(client.Authorized(HttpMethod.Get, "/api/auth/me", session));
         Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, me.StatusCode);
     }
 
     [Fact]

@@ -114,6 +114,13 @@ public sealed class ChangeSubscriptionPlanHandler(
                 "This tenant does not have a subscription."));
         }
 
+        if (subscription.Status == SubscriptionStatus.Suspended)
+        {
+            return Result.Failure<SubscriptionDto>(Error.Forbidden(
+                "subscription.suspended",
+                "This subscription is suspended. Contact support to restore access."));
+        }
+
         var targetPlan = await planCatalog.FindPlanAsync(command.PlanCode, cancellationToken);
         if (targetPlan is null || !targetPlan.IsActive)
         {
@@ -135,7 +142,10 @@ public sealed class ChangeSubscriptionPlanHandler(
 
         var now = DateTimeOffset.UtcNow;
 
-        var isInactive = subscription.Status is SubscriptionStatus.Expired or SubscriptionStatus.Canceled;
+        var isInactive = subscription.Status is SubscriptionStatus.Expired
+            or SubscriptionStatus.Canceled
+            or SubscriptionStatus.Suspended
+            or SubscriptionStatus.PastDue;
 
         if (targetPlan.SortOrder > currentPlan.SortOrder || isInactive)
         {
@@ -279,6 +289,13 @@ public sealed class ReactivateSubscriptionHandler(
             return Result.Failure<SubscriptionDto>(Error.NotFound(
                 "subscription.not_found",
                 "This tenant does not have a subscription."));
+        }
+
+        if (subscription.Status == SubscriptionStatus.Suspended)
+        {
+            return Result.Failure<SubscriptionDto>(Error.Forbidden(
+                "subscription.suspended",
+                "This subscription is suspended. Contact support to restore access."));
         }
 
         var plan = await dbContext.Set<Plan>()

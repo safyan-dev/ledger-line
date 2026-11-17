@@ -14,6 +14,7 @@ public interface ITenancyResolver
         Guid? userId,
         bool allowAnonymousTenant,
         bool isPlatformAdmin,
+        bool allowInactiveSubscription,
         CancellationToken cancellationToken = default);
 }
 
@@ -24,6 +25,7 @@ public sealed class TenantResolutionService(IAppDbContext dbContext) : ITenancyR
         Guid? userId,
         bool allowAnonymousTenant,
         bool isPlatformAdmin,
+        bool allowInactiveSubscription,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(tenantSlug))
@@ -63,6 +65,12 @@ public sealed class TenantResolutionService(IAppDbContext dbContext) : ITenancyR
 
         if (userId is null)
         {
+            if (!allowInactiveSubscription
+                && !await HasOperationalSubscriptionAsync(tenant.Id, cancellationToken))
+            {
+                return InactiveSubscription();
+            }
+
             return Result.Success<TenantContextSnapshot?>(allowAnonymousTenant
                 ? new TenantContextSnapshot(tenant.Id, tenant.Slug, null, null, false)
                 : null);
@@ -81,6 +89,12 @@ public sealed class TenantResolutionService(IAppDbContext dbContext) : ITenancyR
                 "You are not a member of this tenant."));
         }
 
+        if (!allowInactiveSubscription
+            && !await HasOperationalSubscriptionAsync(tenant.Id, cancellationToken))
+        {
+            return InactiveSubscription();
+        }
+
         return Result.Success<TenantContextSnapshot?>(new TenantContextSnapshot(
             tenant.Id,
             tenant.Slug,
@@ -88,6 +102,23 @@ public sealed class TenantResolutionService(IAppDbContext dbContext) : ITenancyR
             membership.Role.ToString(),
             isPlatformAdmin));
     }
+
+    private async Task<bool> HasOperationalSubscriptionAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        var subscription = await dbContext.Set<Subscription>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.TenantId == tenantId, cancellationToken);
+
+        return subscription?.IsActive == true;
+    }
+
+    private static Result<TenantContextSnapshot?> InactiveSubscription()
+        => Result.Failure<TenantContextSnapshot?>(Error.Forbidden(
+            "subscription.inactive",
+            "The workspace subscription is not active. Reactivate the subscription to continue."));
 }
 
 public sealed class TenantMemberRequirement : IAuthorizationRequirement;

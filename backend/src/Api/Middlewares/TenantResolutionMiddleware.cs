@@ -48,12 +48,14 @@ public sealed class TenantResolutionMiddleware(
         var slug = ResolveHostSlug(context.Request.Host.Host)
                    ?? ResolveDevelopmentSlug(context.Request, environment);
         var userId = currentUser.IsAuthenticated ? currentUser.UserId : null;
+        var allowInactiveSubscription = AllowsInactiveSubscription(context.Request);
 
         var result = await resolver.ResolveAsync(
             slug,
             userId,
             isWebhook,
             currentUser.IsPlatformAdmin,
+            allowInactiveSubscription,
             context.RequestAborted);
 
         if (result.IsFailure)
@@ -83,6 +85,19 @@ public sealed class TenantResolutionMiddleware(
         }
 
         return TenantAgnosticPaths.Any(candidate => path.Equals(candidate, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool AllowsInactiveSubscription(HttpRequest request)
+    {
+        if (HttpMethods.IsGet(request.Method)
+            || HttpMethods.IsHead(request.Method)
+            || HttpMethods.IsOptions(request.Method))
+        {
+            return true;
+        }
+
+        return request.Path.StartsWithSegments("/api/tenants/current/subscription")
+               || request.Path.StartsWithSegments("/api/support");
     }
 
     private static string? ResolveHostSlug(string host)

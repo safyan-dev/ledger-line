@@ -4,6 +4,7 @@ import { PublicLayout } from '@/public-site/layout/public-layout'
 import { HomePage } from '@/public-site/pages/home-page'
 import { PlaceholderPage } from '@/public-site/pages/placeholder-page'
 import { AcceptInvitationPage } from '@/public-site/pages/accept-invitation-page'
+import { ConfirmEmailPage } from '@/public-site/pages/confirm-email-page'
 import { ForgotPasswordPage } from '@/public-site/pages/forgot-password-page'
 import { ResetPasswordPage } from '@/public-site/pages/reset-password-page'
 import { SignInPage } from '@/public-site/pages/sign-in-page'
@@ -74,6 +75,7 @@ export const publicSiteRoutes: RouteObject[] = [
       { path: '/sign-up', element: <SignUpPage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
       { path: '/reset-password', element: <ResetPasswordPage /> },
+      { path: '/confirm-email', element: <ConfirmEmailPage /> },
       { path: '/accept-invitation', element: <AcceptInvitationPage /> },
     ],
   },

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using PaymentReconciliation.Modules.Identity.Contracts;
@@ -21,34 +22,38 @@ public sealed class AuthService(
     IOptions<JwtOptions> jwtOptions,
     ICurrentUser currentUser,
     IEmailSender emailSender,
+    IConfiguration configuration,
     IHostEnvironment environment,
     ITenantMembershipVerifier tenantMembershipVerifier,
     ILoginTenantResolver loginTenantResolver)
 {
     private readonly JwtOptions _jwtOptions = jwtOptions.Value;
 
-    public async Task<Result<AuthResponse>> RegisterAsync(
+    public async Task<Result<RegisterResponse>> RegisterAsync(
         RegisterRequest request,
         CancellationToken cancellationToken = default)
     {
         var user = await RegisterUserAsync(request.Email, request.Password, request.DisplayName, cancellationToken);
         if (user.IsFailure)
         {
-            return Result.Failure<AuthResponse>(user.Error!);
+            return Result.Failure<RegisterResponse>(user.Error!);
         }
 
-        return await IssueTokensAsync(user.Value.Id, cancellationToken);
+        return Result.Success(new RegisterResponse(
+            user.Value.User,
+            user.Value.EmailVerificationToken));
     }
 
-    public async Task<Result<AuthUserDto>> RegisterUserAsync(
+    public async Task<Result<RegisteredUser>> RegisterUserAsync(
         string email,
         string password,
         string displayName,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool emailConfirmed = false)
     {
         if (!TryNormalizeEmail(email, out var normalizedEmail))
         {
-            return Result.Failure<AuthUserDto>(Error.Validation(
+            return Result.Failure<RegisteredUser>(Error.Validation(
                 "auth.invalid_email",
                 "A valid email address is required."));
         }
@@ -56,14 +61,14 @@ public sealed class AuthService(
         var normalizedDisplayName = displayName?.Trim() ?? string.Empty;
         if (normalizedDisplayName.Length == 0 || normalizedDisplayName.Length > 160)
         {
-            return Result.Failure<AuthUserDto>(Error.Validation(
+            return Result.Failure<RegisteredUser>(Error.Validation(
                 "auth.invalid_display_name",
                 "Display name must be between 1 and 160 characters."));
         }
 
         if (await userManager.FindByEmailAsync(normalizedEmail) is not null)
         {
-            return Result.Failure<AuthUserDto>(Error.Conflict(
+            return Result.Failure<RegisteredUser>(Error.Conflict(
                 "auth.email_taken",
                 "An account with this email already exists."));
         }
@@ -73,7 +78,7 @@ public sealed class AuthService(
             Id = Guid.NewGuid(),
             UserName = normalizedEmail,
             Email = normalizedEmail,
-            EmailConfirmed = true,
+            EmailConfirmed = emailConfirmed,
             DisplayName = normalizedDisplayName,
             Status = UserStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow
@@ -82,12 +87,16 @@ public sealed class AuthService(
         var createResult = await userManager.CreateAsync(user, password);
         if (!createResult.Succeeded)
         {
-            return Result.Failure<AuthUserDto>(IdentityValidationError(
+            return Result.Failure<RegisteredUser>(IdentityValidationError(
                 createResult,
                 "The account could not be created."));
         }
 
-        return Result.Success(ToDto(user));
+        var verificationToken = emailConfirmed
+            ? null
+            : await SendEmailConfirmationAsync(user, cancellationToken);
+
+        return Result.Success(new RegisteredUser(ToDto(user), verificationToken));
     }
 
     public async Task<Result<AuthUserDto>> VerifyCredentialsAsync(
@@ -96,16 +105,101 @@ public sealed class AuthService(
         CancellationToken cancellationToken = default)
     {
         var user = await userManager.FindByEmailAsync(email.Trim());
-        if (user is null
-            || user.Status != UserStatus.Active
-            || !await userManager.CheckPasswordAsync(user, password))
+        if (user is null || user.Status != UserStatus.Active)
         {
             return Result.Failure<AuthUserDto>(Error.Unauthorized(
                 "auth.invalid_credentials",
                 "Email or password is invalid."));
         }
 
+        if (await userManager.IsLockedOutAsync(user))
+        {
+            return LockedOut();
+        }
+
+        if (!await userManager.CheckPasswordAsync(user, password))
+        {
+            await userManager.AccessFailedAsync(user);
+            if (await userManager.IsLockedOutAsync(user))
+            {
+                return LockedOut();
+            }
+
+            return Result.Failure<AuthUserDto>(Error.Unauthorized(
+                "auth.invalid_credentials",
+                "Email or password is invalid."));
+        }
+
+        await userManager.ResetAccessFailedCountAsync(user);
+        if (!user.EmailConfirmed)
+        {
+            return Result.Failure<AuthUserDto>(Error.Forbidden(
+                "auth.email_not_confirmed",
+                "Confirm your email address before signing in."));
+        }
+
         return Result.Success(ToDto(user));
+    }
+
+    public async Task<Result<AuthUserDto>> ConfirmEmailAsync(
+        ConfirmEmailRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryNormalizeEmail(request.Email, out var email))
+        {
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_email",
+                "A valid email address is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Token))
+        {
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_email_token",
+                "The email confirmation token is invalid or has expired."));
+        }
+
+        var user = await userManager.FindByEmailAsync(email);
+        if (user is null || user.Status != UserStatus.Active)
+        {
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_email_token",
+                "The email confirmation token is invalid or has expired."));
+        }
+
+        if (user.EmailConfirmed)
+        {
+            return Result.Success(ToDto(user));
+        }
+
+        var result = await userManager.ConfirmEmailAsync(user, request.Token);
+        if (!result.Succeeded)
+        {
+            return Result.Failure<AuthUserDto>(Error.Validation(
+                "auth.invalid_email_token",
+                "The email confirmation token is invalid or has expired."));
+        }
+
+        return Result.Success(ToDto(user));
+    }
+
+    public async Task<Result<ResendConfirmationResponse>> ResendConfirmationAsync(
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryNormalizeEmail(email, out var normalizedEmail))
+        {
+            return Result.Success(new ResendConfirmationResponse(null));
+        }
+
+        var user = await userManager.FindByEmailAsync(normalizedEmail);
+        if (user is null || user.Status != UserStatus.Active || user.EmailConfirmed)
+        {
+            return Result.Success(new ResendConfirmationResponse(null));
+        }
+
+        var token = await SendEmailConfirmationAsync(user, cancellationToken);
+        return Result.Success(new ResendConfirmationResponse(token));
     }
 
     public async Task<Result<AuthResponse>> LoginAsync(
@@ -170,6 +264,13 @@ public sealed class AuthService(
                 "User is not available."));
         }
 
+        if (!user.EmailConfirmed)
+        {
+            return Result.Failure<AuthResponse>(Error.Forbidden(
+                "auth.email_not_confirmed",
+                "Confirm your email address before signing in."));
+        }
+
         var accessToken = jwtTokenService.CreateAccessToken(user);
         var refreshToken = GenerateRefreshToken();
         var refreshExpiresAt = DateTimeOffset.UtcNow.AddDays(Math.Max(1, _jwtOptions.RefreshTokenDays));
@@ -177,7 +278,8 @@ public sealed class AuthService(
         dbContext.Set<RefreshToken>().Add(RefreshToken.Create(
             user.Id,
             HashToken(refreshToken),
-            refreshExpiresAt));
+            refreshExpiresAt,
+            Guid.NewGuid()));
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -193,32 +295,51 @@ public sealed class AuthService(
         string refreshToken,
         CancellationToken cancellationToken = default)
     {
-        var stored = await dbContext.Set<RefreshToken>()
-            .FirstOrDefaultAsync(token => token.TokenHash == HashToken(refreshToken), cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var tokenHash = HashToken(refreshToken);
 
-        if (stored is null || !stored.IsActive(DateTimeOffset.UtcNow))
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var stored = await dbContext.Set<RefreshToken>()
+            .FromSqlInterpolated($"SELECT * FROM identity.refresh_tokens WHERE token_hash = {tokenHash} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (stored is null)
         {
             return InvalidRefreshToken();
         }
 
+        if (!stored.IsActive(now))
+        {
+            if (stored.RevokedAt is not null && stored.ReplacedByTokenHash is not null)
+            {
+                await RevokeFamilyAsync(stored.UserId, stored.FamilyId, now, cancellationToken);
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+
+            return InvalidRefreshToken();
+        }
+
         var user = await userManager.FindByIdAsync(stored.UserId.ToString());
-        if (user is null || user.Status != UserStatus.Active)
+        if (user is null || user.Status != UserStatus.Active || !user.EmailConfirmed)
         {
             return InvalidRefreshToken();
         }
 
         var accessToken = jwtTokenService.CreateAccessToken(user);
         var replacement = GenerateRefreshToken();
-        var refreshExpiresAt = DateTimeOffset.UtcNow.AddDays(Math.Max(1, _jwtOptions.RefreshTokenDays));
+        var refreshExpiresAt = now.AddDays(Math.Max(1, _jwtOptions.RefreshTokenDays));
 
-        stored.Revoke();
+        stored.Revoke(now);
         stored.MarkReplaced(HashToken(replacement));
         dbContext.Set<RefreshToken>().Add(RefreshToken.Create(
             user.Id,
             HashToken(replacement),
-            refreshExpiresAt));
+            refreshExpiresAt,
+            stored.FamilyId));
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(new AuthResponse(
             accessToken.Token,
@@ -238,6 +359,12 @@ public sealed class AuthService(
         if (stored is null)
         {
             return Result.Success();
+        }
+
+        var user = await userManager.FindByIdAsync(stored.UserId.ToString());
+        if (user is not null)
+        {
+            user.SecurityStamp = Guid.NewGuid().ToString("N");
         }
 
         stored.Revoke();
@@ -450,7 +577,50 @@ public sealed class AuthService(
             token.Revoke();
         }
 
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is not null)
+        {
+            user.SecurityStamp = Guid.NewGuid().ToString("N");
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RevokeFamilyAsync(
+        Guid userId,
+        Guid familyId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var tokens = await dbContext.Set<RefreshToken>()
+            .Where(token =>
+                token.UserId == userId
+                && token.FamilyId == familyId
+                && token.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var token in tokens)
+        {
+            token.Revoke(now);
+        }
+    }
+
+    private async Task<string?> SendEmailConfirmationAsync(
+        ApplicationUser user,
+        CancellationToken cancellationToken)
+    {
+        var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
+        var baseUrl = configuration["Web:PublicBaseUrl"]?.TrimEnd('/');
+        var email = user.Email ?? string.Empty;
+        var body = baseUrl is null
+            ? $"Confirm your email address with this token: {token}"
+            : $"Confirm your email address: {baseUrl}/confirm-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
+
+        await emailSender.SendAsync(
+            new EmailMessage(email, "Confirm your email address", body),
+            cancellationToken);
+
+        return environment.IsDevelopment() ? token : null;
     }
 
     private static AuthUserDto ToDto(ApplicationUser user)
@@ -508,6 +678,11 @@ public sealed class AuthService(
 
     private static string HashToken(string token)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
+
+    private static Result<AuthUserDto> LockedOut()
+        => Result.Failure<AuthUserDto>(Error.Unauthorized(
+            "auth.account_locked",
+            "Too many failed sign-in attempts. Try again later."));
 
     private static Result<AuthResponse> InvalidRefreshToken()
         => Result.Failure<AuthResponse>(Error.Unauthorized(

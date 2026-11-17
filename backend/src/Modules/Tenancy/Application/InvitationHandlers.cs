@@ -601,7 +601,8 @@ public sealed class AcceptTenantInvitationHandler(
             invitation.Email,
             command.Password,
             displayName,
-            cancellationToken);
+            cancellationToken,
+            emailConfirmed: true);
 
         if (created.IsFailure)
         {
@@ -609,8 +610,8 @@ public sealed class AcceptTenantInvitationHandler(
         }
 
         return Result.Success(new ResolvedUser(
-            created.Value.Id,
-            created.Value.DisplayName,
+            created.Value.User.Id,
+            created.Value.User.DisplayName,
             IsNewUser: true));
     }
 

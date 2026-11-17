@@ -127,7 +127,9 @@ public sealed class GetPlatformSubscriptionHandler(IAppDbContext dbContext)
 public sealed record ActivatePlatformSubscriptionCommand(Guid SubscriptionId)
     : ICommand<PlatformSubscriptionDto>;
 
-public sealed class ActivatePlatformSubscriptionHandler(IAppDbContext dbContext)
+public sealed class ActivatePlatformSubscriptionHandler(
+    IAppDbContext dbContext,
+    IPlatformAuditLogWriter audit)
     : ICommandHandler<ActivatePlatformSubscriptionCommand, PlatformSubscriptionDto>
 {
     public async Task<Result<PlatformSubscriptionDto>> Handle(
@@ -146,6 +148,7 @@ public sealed class ActivatePlatformSubscriptionHandler(IAppDbContext dbContext)
             .FirstAsync(candidate => candidate.Id == subscription.PlanId, cancellationToken);
         if (subscription.Status != SubscriptionStatus.Active)
         {
+            var previousStatus = subscription.Status;
             var now = DateTimeOffset.UtcNow;
             subscription.ChangePlanImmediate(
                 plan.Id,
@@ -161,6 +164,18 @@ public sealed class ActivatePlatformSubscriptionHandler(IAppDbContext dbContext)
                 subscription.Status,
                 note: "Manually activated by a platform administrator; no payment was processed.",
                 occurredAt: now));
+            audit.Add(new PlatformAuditRecord(
+                "platform.subscription.activated",
+                "Subscription",
+                subscription.Id,
+                subscription.TenantId,
+                $"Subscription manually activated on plan {plan.Code}.",
+                new
+                {
+                    planCode = plan.Code,
+                    previousStatus = previousStatus.ToString(),
+                    status = subscription.Status.ToString()
+                }));
         }
 
         return await PlatformSubscriptionRows.GetResult(dbContext, subscription.Id, cancellationToken);
@@ -170,7 +185,9 @@ public sealed class ActivatePlatformSubscriptionHandler(IAppDbContext dbContext)
 public sealed record ChangePlatformSubscriptionPlanCommand(Guid SubscriptionId, string PlanCode)
     : ICommand<PlatformSubscriptionDto>;
 
-public sealed class ChangePlatformSubscriptionPlanHandler(IAppDbContext dbContext)
+public sealed class ChangePlatformSubscriptionPlanHandler(
+    IAppDbContext dbContext,
+    IPlatformAuditLogWriter audit)
     : ICommandHandler<ChangePlatformSubscriptionPlanCommand, PlatformSubscriptionDto>
 {
     public async Task<Result<PlatformSubscriptionDto>> Handle(
@@ -205,6 +222,7 @@ public sealed class ChangePlatformSubscriptionPlanHandler(IAppDbContext dbContex
                 "This tenant is already on that plan."));
         }
 
+        var previousStatus = subscription.Status;
         var now = DateTimeOffset.UtcNow;
         subscription.ChangePlanImmediate(
             targetPlan.Id,
@@ -221,6 +239,19 @@ public sealed class ChangePlatformSubscriptionPlanHandler(IAppDbContext dbContex
             previousPlan.Id,
             $"Plan changed manually from {previousPlan.Name} to {targetPlan.Name}; no payment was processed.",
             occurredAt: now));
+        audit.Add(new PlatformAuditRecord(
+            "platform.subscription.plan_changed",
+            "Subscription",
+            subscription.Id,
+            subscription.TenantId,
+            $"Subscription plan changed manually from {previousPlan.Code} to {targetPlan.Code}.",
+            new
+            {
+                previousPlanCode = previousPlan.Code,
+                planCode = targetPlan.Code,
+                previousStatus = previousStatus.ToString(),
+                status = subscription.Status.ToString()
+            }));
 
         return await PlatformSubscriptionRows.GetResult(dbContext, subscription.Id, cancellationToken);
     }
@@ -229,7 +260,9 @@ public sealed class ChangePlatformSubscriptionPlanHandler(IAppDbContext dbContex
 public sealed record ExtendPlatformSubscriptionCommand(Guid SubscriptionId, int Days)
     : ICommand<PlatformSubscriptionDto>;
 
-public sealed class ExtendPlatformSubscriptionHandler(IAppDbContext dbContext)
+public sealed class ExtendPlatformSubscriptionHandler(
+    IAppDbContext dbContext,
+    IPlatformAuditLogWriter audit)
     : ICommandHandler<ExtendPlatformSubscriptionCommand, PlatformSubscriptionDto>
 {
     public async Task<Result<PlatformSubscriptionDto>> Handle(
@@ -245,6 +278,7 @@ public sealed class ExtendPlatformSubscriptionHandler(IAppDbContext dbContext)
         }
 
         var now = DateTimeOffset.UtcNow;
+        var previousPeriodEnd = subscription.CurrentPeriodEnd;
         if (!subscription.ExtendPeriod(command.Days, now))
         {
             return Result.Failure<PlatformSubscriptionDto>(Error.Validation(
@@ -260,6 +294,18 @@ public sealed class ExtendPlatformSubscriptionHandler(IAppDbContext dbContext)
             subscription.Status,
             note: $"Current period extended by {command.Days} days by a platform administrator.",
             occurredAt: now));
+        audit.Add(new PlatformAuditRecord(
+            "platform.subscription.extended",
+            "Subscription",
+            subscription.Id,
+            subscription.TenantId,
+            $"Subscription period extended by {command.Days} days.",
+            new
+            {
+                days = command.Days,
+                previousPeriodEnd,
+                currentPeriodEnd = subscription.CurrentPeriodEnd
+            }));
 
         return await PlatformSubscriptionRows.GetResult(dbContext, subscription.Id, cancellationToken);
     }
@@ -268,7 +314,9 @@ public sealed class ExtendPlatformSubscriptionHandler(IAppDbContext dbContext)
 public sealed record ChangePlatformSubscriptionStatusCommand(Guid SubscriptionId, string Status)
     : ICommand<PlatformSubscriptionDto>;
 
-public sealed class ChangePlatformSubscriptionStatusHandler(IAppDbContext dbContext)
+public sealed class ChangePlatformSubscriptionStatusHandler(
+    IAppDbContext dbContext,
+    IPlatformAuditLogWriter audit)
     : ICommandHandler<ChangePlatformSubscriptionStatusCommand, PlatformSubscriptionDto>
 {
     public async Task<Result<PlatformSubscriptionDto>> Handle(
@@ -284,6 +332,7 @@ public sealed class ChangePlatformSubscriptionStatusHandler(IAppDbContext dbCont
         }
 
         var now = DateTimeOffset.UtcNow;
+        var previousStatus = subscription.Status;
         if (string.Equals(command.Status, "Suspended", StringComparison.OrdinalIgnoreCase))
         {
             subscription.Suspend(now);
@@ -306,6 +355,18 @@ public sealed class ChangePlatformSubscriptionStatusHandler(IAppDbContext dbCont
                 "subscription.invalid_status",
                 "Status must be Active or Suspended."));
         }
+
+        audit.Add(new PlatformAuditRecord(
+            "platform.subscription.status_changed",
+            "Subscription",
+            subscription.Id,
+            subscription.TenantId,
+            $"Subscription status changed from {previousStatus} to {subscription.Status}.",
+            new
+            {
+                previousStatus = previousStatus.ToString(),
+                status = subscription.Status.ToString()
+            }));
 
         return await PlatformSubscriptionRows.GetResult(dbContext, subscription.Id, cancellationToken);
     }

@@ -11,18 +11,22 @@ public sealed class RefreshToken
         Guid userId,
         string tokenHash,
         DateTimeOffset expiresAt,
-        DateTimeOffset createdAt)
+        DateTimeOffset createdAt,
+        Guid familyId)
     {
         Id = id;
         UserId = userId;
         TokenHash = tokenHash;
         ExpiresAt = expiresAt;
         CreatedAt = createdAt;
+        FamilyId = familyId;
     }
 
     public Guid Id { get; private set; }
 
     public Guid UserId { get; private set; }
+
+    public Guid FamilyId { get; private set; }
 
     public string TokenHash { get; private set; } = string.Empty;
 
@@ -36,8 +40,12 @@ public sealed class RefreshToken
 
     public bool IsActive(DateTimeOffset now) => RevokedAt is null && ExpiresAt > now;
 
-    public static RefreshToken Create(Guid userId, string tokenHash, DateTimeOffset expiresAt)
-        => new(Guid.NewGuid(), userId, tokenHash, expiresAt, DateTimeOffset.UtcNow);
+    public static RefreshToken Create(
+        Guid userId,
+        string tokenHash,
+        DateTimeOffset expiresAt,
+        Guid familyId)
+        => new(Guid.NewGuid(), userId, tokenHash, expiresAt, DateTimeOffset.UtcNow, familyId);
 
     public void Revoke(DateTimeOffset? revokedAt = null)
     {

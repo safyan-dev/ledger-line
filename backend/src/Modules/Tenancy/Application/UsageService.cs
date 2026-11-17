@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PaymentReconciliation.Modules.Tenancy.Contracts;
+using PaymentReconciliation.Modules.Tenancy.Domain;
 using PaymentReconciliation.Persistence.Abstractions;
 using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Results;
@@ -88,6 +89,16 @@ public sealed class UsageService(
             return Result.Failure(Error.Unexpected(
                 "usage.transaction_required",
                 "Plan limits can only be enforced inside a transaction."));
+        }
+
+        var subscription = await dbContext.Set<Subscription>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.TenantId == tenantId, cancellationToken);
+        if (subscription is null || !subscription.IsActive)
+        {
+            return Result.Failure(Error.Forbidden(
+                "subscription.inactive",
+                "The workspace subscription is not active. Reactivate the subscription to continue."));
         }
 
         var entitlement = await entitlements.GetEntitlementsAsync(cancellationToken);

@@ -142,6 +142,19 @@ public sealed class SubscriptionTests(LedgerlineAppFactory factory)
 
         var order = await client.SendAsync(client.Authorized(HttpMethod.Get, $"/api/orders/{orderId}", session));
         Assert.Equal(HttpStatusCode.OK, order.StatusCode);
+
+        var blocked = await client.SendAsync(client.Authorized(
+            HttpMethod.Post,
+            "/api/orders",
+            session,
+            JsonContent.Create(new
+            {
+                customerName = "Expired Customer",
+                customerReference = $"EXPIRED-{Guid.NewGuid():N}",
+                expectedAmount = 25m,
+                currency = "USD"
+            })));
+        Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
     }
 
     [Fact]

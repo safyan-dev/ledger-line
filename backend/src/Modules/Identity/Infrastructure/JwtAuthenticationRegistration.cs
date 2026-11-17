@@ -1,11 +1,14 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using PaymentReconciliation.Modules.Identity.Application;
+using PaymentReconciliation.Modules.Identity.Domain;
 using PaymentReconciliation.SharedKernel.Abstractions;
 
 namespace PaymentReconciliation.Modules.Identity.Infrastructure;
@@ -48,6 +51,32 @@ public static class JwtAuthenticationRegistration
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
                     NameClaimType = "display_name"
+                };
+
+                jwtBearer.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = async context =>
+                    {
+                        var userIdClaim = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+                        var securityStamp = context.Principal?.FindFirst("security_stamp")?.Value;
+                        if (!Guid.TryParse(userIdClaim, out var userId)
+                            || string.IsNullOrWhiteSpace(securityStamp))
+                        {
+                            context.Fail("Token is missing required claims.");
+                            return;
+                        }
+
+                        var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+                        var user = await userManager.FindByIdAsync(userId.ToString());
+                        if (user is null || user.Status != UserStatus.Active || !user.EmailConfirmed
+                            || !string.Equals(
+                                user.SecurityStamp,
+                                securityStamp,
+                                StringComparison.Ordinal))
+                        {
+                            context.Fail("Token is no longer valid.");
+                        }
+                    }
                 };
             });
 

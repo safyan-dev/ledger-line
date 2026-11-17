@@ -20,9 +20,11 @@ public sealed record TenantSessionDto(
     IdentityUser User);
 
 public sealed record RegisterTenantResponse(
-    TenantSessionDto Session,
+    TenantSessionDto? Session,
     TenantDto Tenant,
     string PlanCode,
-    string PlanName);
+    string PlanName,
+    bool EmailVerificationRequired,
+    string? EmailVerificationToken);
 
 public sealed record MembershipDto(Guid TenantId, string Name, string Slug, string Role);

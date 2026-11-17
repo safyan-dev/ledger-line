@@ -73,6 +73,7 @@ public static class PlatformEndpoints
             Guid tenantId,
             PlatformTenantStatusRequest request,
             IAppDbContext dbContext,
+            IPlatformAuditLogWriter audit,
             CancellationToken cancellationToken) =>
         {
             var tenant = await dbContext.Set<Tenant>()
@@ -82,6 +83,7 @@ public static class PlatformEndpoints
                 return Results.NotFound();
             }
 
+            var previousStatus = tenant.Status.ToString();
             if (string.Equals(request.Status, "Active", StringComparison.OrdinalIgnoreCase))
             {
                 tenant.Activate();
@@ -97,6 +99,14 @@ public static class PlatformEndpoints
                     ["status"] = ["Status must be Active or Suspended."]
                 });
             }
+
+            audit.Add(new PlatformAuditRecord(
+                "platform.tenant.status_changed",
+                "Tenant",
+                tenant.Id,
+                tenant.Id,
+                $"Tenant {tenant.Slug} status changed from {previousStatus} to {tenant.Status}.",
+                new { previousStatus, status = tenant.Status.ToString() }));
 
             await dbContext.SaveChangesAsync(cancellationToken);
             return Results.Ok(new { tenant.Id, status = tenant.Status.ToString() });
@@ -140,6 +150,7 @@ public static class PlatformEndpoints
             string code,
             PlatformPlanStatusRequest request,
             IAppDbContext dbContext,
+            IPlatformAuditLogWriter audit,
             CancellationToken cancellationToken) =>
         {
             var plan = await dbContext.Set<Plan>()
@@ -149,7 +160,16 @@ public static class PlatformEndpoints
                 return Results.NotFound();
             }
 
+            var previous = plan.IsActive;
             plan.SetActive(request.IsActive);
+            audit.Add(new PlatformAuditRecord(
+                "platform.plan.status_changed",
+                "Plan",
+                plan.Id,
+                null,
+                $"Plan {plan.Code} availability changed from {previous} to {plan.IsActive}.",
+                new { previousActive = previous, active = plan.IsActive }));
+
             await dbContext.SaveChangesAsync(cancellationToken);
             return Results.Ok(new { plan.Code, plan.IsActive });
         })
@@ -164,6 +184,7 @@ public static class PlatformEndpoints
             string featureKey,
             PlatformPlanFeatureRequest request,
             IAppDbContext dbContext,
+            IPlatformAuditLogWriter audit,
             CancellationToken cancellationToken) =>
         {
             var plan = await dbContext.Set<Plan>()
@@ -182,7 +203,22 @@ public static class PlatformEndpoints
                 return Results.NotFound();
             }
 
+            var previous = feature.IsIncluded;
             feature.SetIncluded(request.Included);
+            audit.Add(new PlatformAuditRecord(
+                "platform.plan.feature_changed",
+                "Plan",
+                plan.Id,
+                null,
+                $"Feature {feature.Feature!.Key} on plan {plan.Code} changed from {previous} to {feature.IsIncluded}.",
+                new
+                {
+                    planCode = plan.Code,
+                    featureKey = feature.Feature.Key,
+                    previousIncluded = previous,
+                    included = feature.IsIncluded
+                }));
+
             await dbContext.SaveChangesAsync(cancellationToken);
             return Results.Ok(new { key = feature.Feature!.Key, feature.IsIncluded });
         })
@@ -197,6 +233,7 @@ public static class PlatformEndpoints
             string limitKey,
             PlatformPlanLimitRequest request,
             IAppDbContext dbContext,
+            IPlatformAuditLogWriter audit,
             CancellationToken cancellationToken) =>
         {
             var plan = await dbContext.Set<Plan>()
@@ -222,7 +259,22 @@ public static class PlatformEndpoints
                 });
             }
 
+            var previous = limit.Value;
             limit.SetValue(request.Value);
+            audit.Add(new PlatformAuditRecord(
+                "platform.plan.limit_changed",
+                "Plan",
+                plan.Id,
+                null,
+                $"Limit {limit.Key} on plan {plan.Code} changed from {previous?.ToString() ?? "unlimited"} to {limit.Value?.ToString() ?? "unlimited"}.",
+                new
+                {
+                    planCode = plan.Code,
+                    limitKey = limit.Key,
+                    previousValue = previous,
+                    value = limit.Value
+                }));
+
             await dbContext.SaveChangesAsync(cancellationToken);
             return Results.Ok(new { limit.Key, limit.Label, limit.Value, limit.Display });
         })

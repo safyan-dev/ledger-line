@@ -177,7 +177,8 @@ public sealed class ReplyToPlatformSupportTicketValidator
 
 public sealed class ReplyToPlatformSupportTicketHandler(
     IAppDbContext dbContext,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IPlatformAuditLogWriter audit)
     : ICommandHandler<ReplyToPlatformSupportTicketCommand, SupportTicketMessageDto>
 {
     public async Task<Result<SupportTicketMessageDto>> Handle(
@@ -210,6 +211,12 @@ public sealed class ReplyToPlatformSupportTicketHandler(
             DateTimeOffset.UtcNow,
             actor);
         dbContext.Set<SupportTicketMessage>().Add(message);
+        audit.Add(new PlatformAuditRecord(
+            "platform.support.replied",
+            "SupportTicket",
+            ticket.Id,
+            ticket.TenantId,
+            $"Platform administrator replied to support ticket {ticket.Subject}."));
         return Result.Success(message.ToDto());
     }
 }
@@ -217,7 +224,10 @@ public sealed class ReplyToPlatformSupportTicketHandler(
 public sealed record ChangePlatformSupportTicketStatusCommand(Guid TicketId, string Status)
     : ICommand<SupportTicketDto>;
 
-public sealed class ChangePlatformSupportTicketStatusHandler(IAppDbContext dbContext, ICurrentUser currentUser)
+public sealed class ChangePlatformSupportTicketStatusHandler(
+    IAppDbContext dbContext,
+    ICurrentUser currentUser,
+    IPlatformAuditLogWriter audit)
     : ICommandHandler<ChangePlatformSupportTicketStatusCommand, SupportTicketDto>
 {
     public async Task<Result<SupportTicketDto>> Handle(
@@ -241,8 +251,16 @@ public sealed class ChangePlatformSupportTicketStatusHandler(IAppDbContext dbCon
                 "The support ticket was not found."));
         }
 
+        var previousStatus = ticket.Status;
         var actor = currentUser.Actor with { Role = "PlatformAdmin" };
         ticket.ChangeStatus(status, DateTimeOffset.UtcNow, actor);
+        audit.Add(new PlatformAuditRecord(
+            "platform.support.status_changed",
+            "SupportTicket",
+            ticket.Id,
+            ticket.TenantId,
+            $"Support ticket status changed from {previousStatus} to {ticket.Status}.",
+            new { previousStatus = previousStatus.ToString(), status = ticket.Status.ToString() }));
         return Result.Success(ticket.ToDto());
     }
 }

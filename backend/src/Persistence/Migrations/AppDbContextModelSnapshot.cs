@@ -315,6 +315,94 @@ namespace Persistence.Migrations
                     b.ToTable("audit_logs", "audit");
                 });
 
+            modelBuilder.Entity("PaymentReconciliation.Modules.Auditing.Domain.PlatformAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ActorEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("actor_email");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<string>("ActorName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("actor_name");
+
+                    b.Property<string>("ActorRole")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("actor_role");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("summary");
+
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_id");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("target_type");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_platform_audit_logs");
+
+                    b.HasIndex("Action")
+                        .HasDatabaseName("ix_platform_audit_logs_action");
+
+                    b.HasIndex("ActorId")
+                        .HasDatabaseName("ix_platform_audit_logs_actor_id");
+
+                    b.HasIndex("OccurredAt")
+                        .HasDatabaseName("ix_platform_audit_logs_occurred_at");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_platform_audit_logs_tenant_id");
+
+                    b.HasIndex("TargetType", "TargetId")
+                        .HasDatabaseName("ix_platform_audit_logs_target_type_target_id");
+
+                    b.ToTable("platform_audit_logs", "audit");
+                });
+
             modelBuilder.Entity("PaymentReconciliation.Modules.Identity.Domain.ApplicationUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -434,6 +522,10 @@ namespace Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("family_id");
+
                     b.Property<string>("ReplacedByTokenHash")
                         .HasColumnType("text")
                         .HasColumnName("replaced_by_token_hash");
@@ -464,6 +556,9 @@ namespace Persistence.Migrations
 
                     b.HasIndex("UserId", "RevokedAt")
                         .HasDatabaseName("ix_refresh_tokens_user_id_revoked_at");
+
+                    b.HasIndex("UserId", "FamilyId", "RevokedAt")
+                        .HasDatabaseName("ix_refresh_tokens_user_id_family_id_revoked_at");
 
                     b.ToTable("refresh_tokens", "identity");
                 });

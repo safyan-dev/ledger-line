@@ -1,4 +1,6 @@
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using PaymentReconciliation.Api;
@@ -70,12 +72,37 @@ builder.Services.AddCors(options => options.AddPolicy("web", policy => policy
     .AllowAnyHeader()
     .AllowAnyMethod()));
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext =>
+    {
+        var permitLimit = Math.Max(1, builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10));
+        var windowSeconds = Math.Max(1, builder.Configuration.GetValue("RateLimiting:AuthWindowSeconds", 60));
+        var partitionKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var replenishmentPeriod = TimeSpan.FromSeconds(
+            Math.Max(0.001, windowSeconds / (double)permitLimit));
+
+        return RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey,
+            _ => new TokenBucketRateLimiterOptions
+            {
+                TokenLimit = permitLimit,
+                TokensPerPeriod = 1,
+                ReplenishmentPeriod = replenishmentPeriod,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+});
+
 var app = builder.Build();
 var seedDemoData = app.Configuration.GetValue("Database:SeedDemoData", false);
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
 app.UseCors("web");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseTenantResolution();
 app.UseAuthorization();

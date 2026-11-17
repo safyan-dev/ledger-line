@@ -149,6 +149,7 @@ Webhooks__Providers__mock__SigningSecret
 Webhooks__Providers__stripe__SigningSecret
 Demo__Password
 Demo__PlatformPassword
+Web__PublicBaseUrl
 ```
 
 `appsettings.json` contains no secrets. User-secrets are plaintext local storage and are not suitable for production.
@@ -267,5 +268,8 @@ The main engineering goals behind Ledgerline are:
 - Enforcing tenant isolation at both application and database levels.
 - Designing concurrency-safe operations.
 - Making business workflows observable and testable.
+- Enforcing authentication lockout, rate limits, refresh-token rotation with reuse detection, and immediate access-token invalidation on logout or credential changes.
+- Keeping inactive subscriptions read-only while preserving billing and reactivation access.
+- Requiring email confirmation for self-service signups and recording platform-scoped audit events for administrative changes.
 
 This project is an ongoing implementation, with a focus on practical engineering decisions and the trade-offs involved in building a SaaS application.

@@ -34,7 +34,8 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options) : IJwtTokenSer
             new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
             new(ClaimTypes.Email, user.Email ?? string.Empty),
             new("display_name", user.DisplayName),
-            new("platform_admin", user.IsPlatformAdmin.ToString().ToLowerInvariant())
+            new("platform_admin", user.IsPlatformAdmin.ToString().ToLowerInvariant()),
+            new("security_stamp", user.SecurityStamp ?? string.Empty)
         };
 
         var credentials = new SigningCredentials(

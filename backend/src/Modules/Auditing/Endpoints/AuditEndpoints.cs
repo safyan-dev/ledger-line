@@ -35,6 +35,38 @@ public static class AuditEndpoints
         .WithName("GetAuditLogs")
         .Produces<PagedResult<AuditLogDto>>();
 
+        var platformGroup = app.MapGroup("/api/platform/audit-logs")
+            .WithTags("Platform Audit")
+            .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
+
+        platformGroup.MapGet("/", async (
+            int? page,
+            int? pageSize,
+            string? action,
+            string? targetType,
+            Guid? targetId,
+            Guid? tenantId,
+            string? search,
+            IDispatcher dispatcher,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await dispatcher.SendAsync(
+                new GetPlatformAuditLogsQuery(
+                    page ?? 1,
+                    pageSize ?? 25,
+                    action,
+                    targetType,
+                    targetId,
+                    tenantId,
+                    search),
+                cancellationToken);
+
+            return result.ToHttpResult();
+        })
+        .WithName("GetPlatformAuditLogs")
+        .Produces<PagedResult<PlatformAuditLogDto>>()
+        .ProducesProblem(StatusCodes.Status403Forbidden);
+
         return app;
     }
 }

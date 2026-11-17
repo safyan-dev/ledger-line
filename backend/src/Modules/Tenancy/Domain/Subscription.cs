@@ -138,7 +138,10 @@ public sealed class Subscription : AggregateRoot, ITenantOwned
             return true;
         }
 
-        if (Status is SubscriptionStatus.Expired or SubscriptionStatus.Canceled or SubscriptionStatus.Suspended)
+        if (Status is SubscriptionStatus.Expired
+            or SubscriptionStatus.Canceled
+            or SubscriptionStatus.Suspended
+            or SubscriptionStatus.PastDue)
         {
             var wasExpired = Status is SubscriptionStatus.Expired or SubscriptionStatus.Canceled;
             Status = SubscriptionStatus.Active;
