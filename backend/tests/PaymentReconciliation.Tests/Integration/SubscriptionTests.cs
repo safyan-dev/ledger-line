@@ -6,9 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PaymentReconciliation.Modules.Tenancy.Infrastructure;
 using PaymentReconciliation.Persistence;
-using PaymentReconciliation.Tests.Infrastructure;
+using PaymentReconciliation.Tests.Integration.Infrastructure;
 
-namespace PaymentReconciliation.Tests;
+namespace PaymentReconciliation.Tests.Integration;
 
 [Collection(LedgerlineCollection.Name)]
 public sealed class SubscriptionTests(LedgerlineAppFactory factory)

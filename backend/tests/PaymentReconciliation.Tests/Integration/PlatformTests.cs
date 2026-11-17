@@ -3,9 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Xunit;
-using PaymentReconciliation.Tests.Infrastructure;
+using PaymentReconciliation.Tests.Integration.Infrastructure;
 
-namespace PaymentReconciliation.Tests;
+namespace PaymentReconciliation.Tests.Integration;
 
 [Collection(LedgerlineCollection.Name)]
 public sealed class PlatformTests(LedgerlineAppFactory factory)

@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace PaymentReconciliation.Tests.Infrastructure;
+namespace PaymentReconciliation.Tests.Integration.Infrastructure;
 
 [CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class LedgerlineCollection : ICollectionFixture<LedgerlineAppFactory>

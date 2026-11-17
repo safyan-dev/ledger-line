@@ -2,7 +2,7 @@ using Xunit;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
-namespace PaymentReconciliation.Tests.Architecture;
+namespace PaymentReconciliation.Tests.Unit.Architecture;
 
 public sealed class ModuleBoundaryTests
 {

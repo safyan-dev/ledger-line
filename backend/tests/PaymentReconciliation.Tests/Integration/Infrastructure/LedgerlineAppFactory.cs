@@ -9,7 +9,7 @@ using PaymentReconciliation.Persistence;
 using Testcontainers.PostgreSql;
 using Xunit;
 
-namespace PaymentReconciliation.Tests.Infrastructure;
+namespace PaymentReconciliation.Tests.Integration.Infrastructure;
 
 public sealed class LedgerlineAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {

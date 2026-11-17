@@ -1,15 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using PaymentReconciliation.Persistence;
-using PaymentReconciliation.Tests.Infrastructure;
+using PaymentReconciliation.Tests.Integration.Infrastructure;
 
-namespace PaymentReconciliation.Tests;
+namespace PaymentReconciliation.Tests.Integration;
 
 [Collection(LedgerlineCollection.Name)]
 public sealed class UsageLimitTests(LedgerlineAppFactory factory)
@@ -203,9 +201,16 @@ public sealed class UsageLimitTests(LedgerlineAppFactory factory)
         try
         {
             await SetPlanLimitAsync("free", "payments_per_month", 0);
-            await SendSignedWebhookAsync(client, owner, eventId, providerPaymentId);
 
-            var failed = await WaitForWebhookAsync(
+            var payload = WebhookTestClient.PaymentPayload(
+                eventId,
+                providerPaymentId,
+                10m,
+                reference: $"WH-{Guid.NewGuid():N}");
+            var ack = await WebhookTestClient.SendSignedAsync(client, owner.TenantSlug, payload);
+            Assert.Equal(HttpStatusCode.Accepted, ack.StatusCode);
+
+            var failed = await WebhookTestClient.WaitForEventAsync(
                 client,
                 owner,
                 eventId,
@@ -222,7 +227,7 @@ public sealed class UsageLimitTests(LedgerlineAppFactory factory)
                 owner));
             Assert.Equal(HttpStatusCode.NoContent, reprocess.StatusCode);
 
-            var processed = await WaitForWebhookAsync(
+            var processed = await WebhookTestClient.WaitForEventAsync(
                 client,
                 owner,
                 eventId,
@@ -263,67 +268,4 @@ public sealed class UsageLimitTests(LedgerlineAppFactory factory)
             $"UPDATE tenancy.plan_limits SET value = {value} WHERE key = {key} AND plan_id = (SELECT id FROM tenancy.plans WHERE code = {planCode})");
     }
 
-    private static async Task SendSignedWebhookAsync(
-        HttpClient client,
-        TestSession session,
-        string eventId,
-        string providerPaymentId)
-    {
-        var payload = JsonSerializer.Serialize(new
-        {
-            id = eventId,
-            type = "payment.succeeded",
-            created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            data = new
-            {
-                paymentId = providerPaymentId,
-                amount = 1000,
-                currency = "USD",
-                reference = $"WH-{Guid.NewGuid():N}",
-                customerName = "Webhook Limit"
-            }
-        });
-
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes("whsec_test_ledgerline"));
-        var signature = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
-
-        var request = new HttpRequestMessage(HttpMethod.Post, "/api/webhooks/mock")
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-        request.Headers.Host = $"{session.TenantSlug}.localhost";
-        request.Headers.Add("X-Provider-Signature", $"sha256={signature}");
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-    }
-
-    private static async Task<JsonElement> WaitForWebhookAsync(
-        HttpClient client,
-        TestSession session,
-        string eventId,
-        Func<JsonElement, bool> predicate)
-    {
-        for (var attempt = 0; attempt < 100; attempt++)
-        {
-            var response = await client.SendAsync(client.Authorized(
-                HttpMethod.Get,
-                $"/api/webhooks?search={eventId}&pageSize=10",
-                session));
-            response.EnsureSuccessStatusCode();
-
-            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-            foreach (var item in body.GetProperty("items").EnumerateArray())
-            {
-                if (item.GetProperty("providerEventId").GetString() == eventId && predicate(item))
-                {
-                    return item;
-                }
-            }
-
-            await Task.Delay(100);
-        }
-
-        throw new Xunit.Sdk.XunitException($"Webhook event {eventId} did not reach the expected state.");
-    }
 }

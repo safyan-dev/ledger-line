@@ -2,9 +2,9 @@ using Xunit;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using PaymentReconciliation.Tests.Infrastructure;
+using PaymentReconciliation.Tests.Integration.Infrastructure;
 
-namespace PaymentReconciliation.Tests;
+namespace PaymentReconciliation.Tests.Integration;
 
 [Collection(LedgerlineCollection.Name)]
 public sealed class TenantIsolationTests(LedgerlineAppFactory factory)

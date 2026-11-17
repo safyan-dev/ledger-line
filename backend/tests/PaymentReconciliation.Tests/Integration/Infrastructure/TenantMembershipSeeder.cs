@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PaymentReconciliation.Modules.Tenancy.Domain;
 using PaymentReconciliation.Persistence;
 
-namespace PaymentReconciliation.Tests.Infrastructure;
+namespace PaymentReconciliation.Tests.Integration.Infrastructure;
 
 public static class TenantMembershipSeeder
 {

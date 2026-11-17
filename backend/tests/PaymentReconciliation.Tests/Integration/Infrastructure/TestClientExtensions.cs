@@ -2,7 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace PaymentReconciliation.Tests.Infrastructure;
+namespace PaymentReconciliation.Tests.Integration.Infrastructure;
 
 public sealed record TestSession(string AccessToken, string RefreshToken, Guid TenantId, string TenantSlug, Guid UserId);
 
@@ -89,7 +89,11 @@ public static class TestClientExtensions
         return request;
     }
 
-    public static async Task<Guid> CreateOrderAsync(this HttpClient client, TestSession session, decimal amount = 100)
+    public static async Task<Guid> CreateOrderAsync(
+        this HttpClient client,
+        TestSession session,
+        decimal amount = 100,
+        string? orderNumber = null)
     {
         var response = await client.SendAsync(client.Authorized(HttpMethod.Post, "/api/orders", session,
             JsonContent.Create(new
@@ -99,7 +103,7 @@ public static class TestClientExtensions
                 description = "test order",
                 expectedAmount = amount,
                 currency = "USD",
-                orderNumber = (string?)null
+                orderNumber
             })));
 
         response.EnsureSuccessStatusCode();
