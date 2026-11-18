@@ -28,3 +28,5 @@ commandcode/
 .commandcode/
 artifacts/
 scripts/
+## Perf fleet credentials (tenant logins and tokens)
+perf/results/*-fleet.json
