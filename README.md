@@ -59,6 +59,8 @@ Provider Webhook
 
 The backend follows a modular monolith architecture. Each business module owns its domain logic, application handlers, infrastructure, and API endpoints.
 
+<img width="897" height="862" alt="image" src="https://github.com/user-attachments/assets/c730f1d7-430d-4c89-80bc-67426732b121" />
+
 Main modules:
 
 - **Identity & Tenancy** — Authentication, memberships, and tenant resolution.
