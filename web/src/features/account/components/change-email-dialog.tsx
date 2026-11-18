@@ -38,7 +38,6 @@ export function ChangeEmailDialog({
   const queryClient = useQueryClient()
   const [step, setStep] = useState<'email' | 'token'>('email')
   const [token, setToken] = useState('')
-  const [devToken, setDevToken] = useState<string | null>(null)
 
   const form = useForm<EmailFormValues>({
     resolver: zodResolver(emailSchema),
@@ -49,15 +48,12 @@ export function ChangeEmailDialog({
     onOpenChange(false)
     setStep('email')
     setToken('')
-    setDevToken(null)
     form.reset({ newEmail: '' })
   }
 
   const requestMutation = useMutation({
     mutationFn: requestEmailChange,
-    onSuccess: (response) => {
-      setDevToken(response.verificationToken)
-      setToken(response.verificationToken ?? '')
+    onSuccess: () => {
       setStep('token')
       toast.success('Verification token sent to the new email address.')
     },
@@ -125,12 +121,6 @@ export function ChangeEmailDialog({
           </form>
         ) : (
           <div className="space-y-4">
-            {devToken ? (
-              <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
-                <p className="font-medium">Development only</p>
-                <p className="mt-1 break-all">Use this token: {devToken}</p>
-              </div>
-            ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="emailToken">Verification token</Label>
               <Input

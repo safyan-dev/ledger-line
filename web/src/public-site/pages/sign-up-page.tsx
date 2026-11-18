@@ -58,7 +58,7 @@ export function SignUpPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [slugTouched, setSlugTouched] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [verification, setVerification] = useState<{ email: string; token: string | null } | null>(null)
+  const [verification, setVerification] = useState<{ email: string } | null>(null)
   const [selectedPlan] = useState<SelectedPlan | null>(() => {
     const code = params.get('plan')
     const stored = getSelectedPlan()
@@ -97,7 +97,7 @@ export function SignUpPage() {
       })
 
       if (!response.session) {
-        setVerification({ email: values.email, token: response.emailVerificationToken })
+        setVerification({ email: values.email })
         return
       }
 
@@ -135,16 +135,6 @@ export function SignUpPage() {
             Confirm your address before signing in.
           </p>
         </div>
-        {verification.token ? (
-          <Button asChild className="w-full" size="lg">
-            <Link
-              to={`/confirm-email?email=${encodeURIComponent(verification.email)}&token=${encodeURIComponent(verification.token)}`}
-            >
-              Verify email now
-              <ArrowRight className="size-4" aria-hidden />
-            </Link>
-          </Button>
-        ) : null}
         <p className="text-center text-sm text-muted-foreground">
           Already confirmed?{' '}
           <Link to="/sign-in" className="font-medium text-primary hover:underline">

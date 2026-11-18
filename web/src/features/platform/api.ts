@@ -13,8 +13,15 @@ import type {
   SupportTicketMessageDto,
 } from '@/types/api'
 
-export function getPlatformTenants(): Promise<PlatformTenantDto[]> {
-  return apiRequest<PlatformTenantDto[]>('/platform/tenants')
+export function getPlatformTenants(filters: {
+  page: number
+  pageSize: number
+  search?: string
+  status?: string
+}): Promise<PagedResult<PlatformTenantDto>> {
+  return apiRequest<PagedResult<PlatformTenantDto>>(
+    `/platform/tenants${toQueryString(filters)}`,
+  )
 }
 
 export function getPlatformDashboard(): Promise<PlatformDashboardDto> {

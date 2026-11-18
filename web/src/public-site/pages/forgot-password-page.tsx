@@ -20,7 +20,6 @@ type FormValues = z.infer<typeof schema>
 export function ForgotPasswordPage() {
   usePageTitle('Forgot password')
   const [sent, setSent] = useState(false)
-  const [resetToken, setResetToken] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
   const form = useForm<FormValues>({
@@ -32,8 +31,7 @@ export function ForgotPasswordPage() {
     setFormError(null)
 
     try {
-      const response = await forgotPassword(values.email)
-      setResetToken(response.resetToken)
+      await forgotPassword(values.email)
       setSent(true)
     } catch (error) {
       setFormError(errorMessage(error))
@@ -60,19 +58,6 @@ export function ForgotPasswordPage() {
             <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
             <span>If an account exists for that email, a reset token has been sent.</span>
           </div>
-
-          {resetToken ? (
-            <div className="space-y-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-3 text-xs text-warning-foreground">
-              <p className="font-medium">Development only</p>
-              <p className="break-all">Reset token: {resetToken}</p>
-              <Link
-                to={`/reset-password?email=${encodeURIComponent(form.getValues('email'))}&token=${encodeURIComponent(resetToken)}`}
-                className="inline-block font-medium text-primary hover:underline"
-              >
-                Continue to reset password
-              </Link>
-            </div>
-          ) : null}
 
           <Button asChild variant="outline" className="w-full">
             <Link to="/reset-password">I have a reset token</Link>

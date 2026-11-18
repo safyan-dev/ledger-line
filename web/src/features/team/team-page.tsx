@@ -8,17 +8,8 @@ import { ErrorState } from '@/components/data/error-state'
 import { ListPagination } from '@/components/data/list-pagination'
 import { StatusBadge } from '@/components/data/status-badge'
 import { ConfirmDialog } from '@/components/data/confirm-dialog'
-import { CopyButton } from '@/components/data/copy-button'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -51,7 +42,6 @@ export function TeamPage() {
   const [roleTarget, setRoleTarget] = useState<TenantMemberDto | null>(null)
   const [removeTarget, setRemoveTarget] = useState<TenantMemberDto | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<TenantInvitationDto | null>(null)
-  const [resentLink, setResentLink] = useState<string | null>(null)
 
   const members = useQuery({ queryKey: ['team', 'members'], queryFn: getMembers })
   const invitations = useQuery({
@@ -92,11 +82,6 @@ export function TeamPage() {
     onSuccess: (response) => {
       toast.success(`Invitation resent to ${response.invitation.email}`)
       void queryClient.invalidateQueries({ queryKey: ['team'] })
-      if (response.token) {
-        setResentLink(
-          `${window.location.origin}/accept-invitation?token=${encodeURIComponent(response.token)}`,
-        )
-      }
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -351,26 +336,6 @@ export function TeamPage() {
         pending={revokeMutation.isPending}
         onConfirm={() => revokeTarget && revokeMutation.mutate(revokeTarget.id)}
       />
-
-      <Dialog open={Boolean(resentLink)} onOpenChange={(open) => !open && setResentLink(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Invitation resent</DialogTitle>
-            <DialogDescription>
-              The email sender is a logging stub in this build. Share the new invitation link directly.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
-            <span className="min-w-0 flex-1 break-all">{resentLink}</span>
-            {resentLink ? <CopyButton value={resentLink} label="invitation link" /> : null}
-          </div>
-          <DialogFooter>
-            <Button type="button" onClick={() => setResentLink(null)}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {resendMutation.isPending ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">

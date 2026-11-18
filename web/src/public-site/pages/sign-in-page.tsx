@@ -42,7 +42,7 @@ export function SignInPage() {
     setFormError(null)
 
     try {
-      const response = await loginRequest(values.email, values.password, tenantSlug ?? undefined)
+      const response = await loginRequest(values.email, values.password)
       queryClient.clear()
 
       if (response.tenant) {

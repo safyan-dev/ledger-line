@@ -347,7 +347,6 @@ export type TenantInvitationDto = {
 
 export type IssuedTenantInvitationDto = {
   invitation: TenantInvitationDto
-  token: string | null
 }
 
 export type InvitationSessionDto = {

@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Building2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -69,28 +68,22 @@ const columns: DataTableColumn<PlatformTenantDto>[] = [
 ]
 
 export function PlatformPage() {
-  const tenants = useQuery({ queryKey: ['platform', 'tenants'], queryFn: getPlatformTenants })
   const table = useTableParams(25)
-  const search = table.get('search').toLocaleLowerCase()
+  const search = table.get('search')
   const status = table.get('status')
-  const filteredTenants = useMemo(
-    () =>
-      (tenants.data ?? []).filter((tenant) => {
-        const matchesSearch =
-          !search ||
-          [tenant.name, tenant.slug, tenant.ownerEmail ?? ''].some((value) =>
-            value.toLocaleLowerCase().includes(search),
-          )
-        return matchesSearch && (!status || tenant.status === status)
+  const tenants = useQuery({
+    queryKey: ['platform', 'tenants', table.page, table.pageSize, search, status],
+    queryFn: () =>
+      getPlatformTenants({
+        page: table.page,
+        pageSize: table.pageSize,
+        search: search || undefined,
+        status: status || undefined,
       }),
-    [search, status, tenants.data],
-  )
-  const totalPages = Math.ceil(filteredTenants.length / table.pageSize)
-  const currentPage = Math.min(table.page, Math.max(1, totalPages))
-  const pageItems = filteredTenants.slice(
-    (currentPage - 1) * table.pageSize,
-    currentPage * table.pageSize,
-  )
+  })
+  const pageItems = tenants.data?.items ?? []
+  const totalCount = tenants.data?.totalCount ?? 0
+  const totalPages = tenants.data?.totalPages ?? 0
 
   return (
     <div>
@@ -136,20 +129,20 @@ export function PlatformPage() {
             empty={
               <EmptyState
                 icon={<Building2 className="size-4" aria-hidden />}
-                title={tenants.data.length === 0 ? 'No tenants yet' : 'No tenants match these filters'}
+                title={totalCount === 0 ? 'No tenants yet' : 'No tenants match these filters'}
                 description={
-                  tenants.data.length === 0
+                  totalCount === 0
                     ? 'New customer workspaces will appear here.'
                     : 'Try a different search or status filter.'
                 }
               />
             }
           />
-          {filteredTenants.length > 0 ? (
+          {totalCount > 0 ? (
             <ListPagination
-              page={currentPage}
+              page={tenants.data?.page ?? 1}
               pageSize={table.pageSize}
-              totalCount={filteredTenants.length}
+              totalCount={totalCount}
               totalPages={totalPages}
               onPageChange={table.setPage}
               onPageSizeChange={table.setPageSize}

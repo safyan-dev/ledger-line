@@ -55,17 +55,12 @@ export type RegisterTenantResponse = {
     role: string
   }
   emailVerificationRequired: boolean
-  emailVerificationToken: string | null
 }
 
-export type ForgotPasswordResponse = {
-  resetToken: string | null
-}
-
-export function loginRequest(email: string, password: string, tenantSlug?: string): Promise<AuthResponse> {
+export function loginRequest(email: string, password: string): Promise<AuthResponse> {
   return apiRequest<AuthResponse>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password, tenantSlug }),
+    body: JSON.stringify({ email, password }),
   })
 }
 
@@ -87,13 +82,6 @@ export function confirmEmail(email: string, token: string): Promise<AuthUser> {
   })
 }
 
-export function resendConfirmation(email: string): Promise<{ verificationToken: string | null }> {
-  return apiRequest<{ verificationToken: string | null }>('/auth/resend-confirmation', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  })
-}
-
 export function getCurrentUser(): Promise<AuthUser> {
   return apiRequest<AuthUser>('/auth/me')
 }
@@ -112,8 +100,8 @@ export function changePassword(currentPassword: string, newPassword: string): Pr
   })
 }
 
-export function forgotPassword(email: string): Promise<ForgotPasswordResponse> {
-  return apiRequest<ForgotPasswordResponse>('/auth/forgot-password', {
+export function forgotPassword(email: string): Promise<void> {
+  return apiRequest<void>('/auth/forgot-password', {
     method: 'POST',
     body: JSON.stringify({ email }),
   })
