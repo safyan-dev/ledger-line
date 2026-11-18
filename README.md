@@ -55,7 +55,7 @@ Provider Webhook
 | Observability | OpenTelemetry, Prometheus, Grafana, Jaeger |
 | Infrastructure | Docker Compose |
 
-## Architecture
+## Application Architecture
 
 The backend follows a modular monolith architecture. Each business module owns its domain logic, application handlers, infrastructure, and API endpoints.
 
@@ -68,6 +68,8 @@ Main modules:
 - **Payments** — Payment records and provider idempotency.
 - **Webhooks** — Signature verification, event ingestion, and background processing.
 - **Reconciliation** — Matching strategies, manual matching, and reconciliation history.
+
+Operational Modules:
 - **Auditing** — Business activity tracking.
 - **Reporting** — Operational dashboard data.
 - **Support** — Tenant-scoped support tickets.
