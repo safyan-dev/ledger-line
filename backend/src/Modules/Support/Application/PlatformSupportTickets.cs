@@ -103,10 +103,11 @@ public sealed class GetPlatformSupportTicketsHandler(
         var tenantNames = await tenantDirectory.GetNamesAsync(
             rows.Select(ticket => ticket.TenantId).Distinct().ToArray(),
             cancellationToken);
+        // Handle missing tenant
         var items = rows.Select(ticket => new PlatformSupportTicketDto(
             ticket.Id,
             ticket.TenantId,
-            tenantNames[ticket.TenantId],
+            tenantNames.GetValueOrDefault(ticket.TenantId) ?? "Unknown tenant",
             ticket.Subject,
             ticket.Category.ToString(),
             ticket.Priority.ToString(),

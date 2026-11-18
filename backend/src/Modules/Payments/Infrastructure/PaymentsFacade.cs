@@ -55,6 +55,28 @@ public sealed class PaymentsFacade(
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PaymentExportRow>> GetPaymentsForExportAsync(
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var take = Math.Clamp(limit, 1, 10_000);
+
+        return await dbContext.Set<Payment>()
+            .AsNoTracking()
+            .OrderByDescending(payment => payment.ReceivedAt)
+            .Take(take)
+            .Select(payment => new PaymentExportRow(
+                payment.Id,
+                payment.Provider,
+                payment.ProviderPaymentId,
+                payment.OrderId,
+                payment.Amount,
+                payment.Currency,
+                payment.Status.ToString(),
+                payment.ReceivedAt))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<Result<ProviderPaymentApplyResult>> ApplyProviderPaymentAsync(
         ProviderPaymentData payment,
         bool succeeded,

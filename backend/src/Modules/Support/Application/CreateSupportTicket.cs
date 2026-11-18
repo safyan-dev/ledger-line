@@ -27,7 +27,8 @@ public sealed class CreateSupportTicketHandler(
     IAppDbContext dbContext,
     ITenantContext tenantContext,
     ICurrentUser currentUser,
-    ITenantAuthorizer authorizer)
+    ITenantAuthorizer authorizer,
+    IFeatureGate featureGate)
     : ICommandHandler<CreateSupportTicketCommand, SupportTicketDto>
 {
     public async Task<Result<SupportTicketDto>> Handle(
@@ -66,6 +67,15 @@ public sealed class CreateSupportTicketHandler(
             return Result.Failure<SupportTicketDto>(Error.Validation(
                 "ticket.invalid_priority",
                 "Priority must be Low, Normal or High."));
+        }
+
+        if (priority == SupportTicketPriority.High)
+        {
+            var feature = await featureGate.EnsureEnabledAsync("priority_support", cancellationToken);
+            if (feature.IsFailure)
+            {
+                return Result.Failure<SupportTicketDto>(feature.Error!);
+            }
         }
 
         var ticket = SupportTicket.Create(

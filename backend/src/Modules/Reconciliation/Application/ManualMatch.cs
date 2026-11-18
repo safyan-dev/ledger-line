@@ -27,13 +27,20 @@ public sealed class ManualMatchHandler(
     IOrdersFacade ordersFacade,
     IReconciliationRepository repository,
     ICurrentUser currentUser,
-    ITenantContext tenantContext)
+    ITenantContext tenantContext,
+    IFeatureGate featureGate)
     : ICommandHandler<ManualMatchCommand, ReconciliationRecordDto>
 {
     public async Task<Result<ReconciliationRecordDto>> Handle(
         ManualMatchCommand command,
         CancellationToken cancellationToken)
     {
+        var feature = await featureGate.EnsureEnabledAsync("reconciliation.advanced", cancellationToken);
+        if (feature.IsFailure)
+        {
+            return Result.Failure<ReconciliationRecordDto>(feature.Error!);
+        }
+
         var paymentResult = await paymentsFacade.GetPaymentForUpdateAsync(command.PaymentId, cancellationToken);
         if (paymentResult.IsFailure)
         {
