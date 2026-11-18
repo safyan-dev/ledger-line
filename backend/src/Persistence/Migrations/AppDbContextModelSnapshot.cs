@@ -632,11 +632,13 @@ namespace Persistence.Migrations
                     b.HasAlternateKey("TenantId", "Id")
                         .HasName("ak_orders_tenant_id_id");
 
-                    b.HasIndex("CustomerReference")
-                        .HasDatabaseName("ix_orders_customer_reference");
-
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_orders_tenant_id");
+
+                    b.HasIndex("TenantId", "CustomerReference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_orders_tenant_id_customer_reference")
+                        .HasFilter("customer_reference IS NOT NULL");
 
                     b.HasIndex("TenantId", "OrderNumber")
                         .IsUnique()
@@ -1613,6 +1615,50 @@ namespace Persistence.Migrations
                     b.ToTable("tenant_users", "tenancy");
                 });
 
+            modelBuilder.Entity("PaymentReconciliation.Modules.Tenancy.Domain.TenantWebhookSecret", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ProtectedSecret")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("protected_secret");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<DateTimeOffset>("RotatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rotated_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_webhook_secrets");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_tenant_webhook_secrets_tenant_id");
+
+                    b.HasIndex("TenantId", "Provider")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tenant_webhook_secrets_tenant_id_provider");
+
+                    b.ToTable("tenant_webhook_secrets", "tenancy");
+                });
+
             modelBuilder.Entity("PaymentReconciliation.Modules.Webhooks.Domain.WebhookEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1651,6 +1697,10 @@ namespace Persistence.Migrations
                         .HasMaxLength(400)
                         .HasColumnType("character varying(400)")
                         .HasColumnName("last_conflict_reason");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
 
                     b.Property<string>("Payload")
                         .IsRequired()
@@ -1713,6 +1763,9 @@ namespace Persistence.Migrations
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_webhook_events_tenant_id");
+
+                    b.HasIndex("Status", "NextAttemptAt")
+                        .HasDatabaseName("ix_webhook_events_status_next_attempt_at");
 
                     b.HasIndex("TenantId", "PaymentId")
                         .HasDatabaseName("ix_webhook_events_tenant_id_payment_id");
@@ -1987,6 +2040,16 @@ namespace Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_tenant_users_asp_net_users_user_id");
+                });
+
+            modelBuilder.Entity("PaymentReconciliation.Modules.Tenancy.Domain.TenantWebhookSecret", b =>
+                {
+                    b.HasOne("PaymentReconciliation.Modules.Tenancy.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_tenant_webhook_secrets_tenant_tenant_id");
                 });
 
             modelBuilder.Entity("PaymentReconciliation.Modules.Webhooks.Domain.WebhookEvent", b =>

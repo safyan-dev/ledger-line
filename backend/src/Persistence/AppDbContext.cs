@@ -89,6 +89,7 @@ public sealed class AppDbContext(
         ConfigureTenantOwned<Subscription>(modelBuilder);
         ConfigureTenantOwned<SubscriptionHistory>(modelBuilder);
         ConfigureTenantOwned<TenantInvitation>(modelBuilder);
+        ConfigureTenantOwned<TenantWebhookSecret>(modelBuilder);
         ConfigureTenantOwned<SupportTicket>(modelBuilder, hasAlternateKey: true);
         ConfigureTenantOwned<SupportTicketMessage>(modelBuilder);
     }
@@ -174,6 +175,8 @@ public sealed class AppDbContext(
             .HasQueryFilter(history => CurrentTenantId != null && history.TenantId == CurrentTenantId);
         modelBuilder.Entity<TenantInvitation>()
             .HasQueryFilter(invitation => CurrentTenantId != null && invitation.TenantId == CurrentTenantId);
+        modelBuilder.Entity<TenantWebhookSecret>()
+            .HasQueryFilter(secret => CurrentTenantId != null && secret.TenantId == CurrentTenantId);
         modelBuilder.Entity<SupportTicket>()
             .HasQueryFilter(ticket => CurrentTenantId != null && ticket.TenantId == CurrentTenantId);
         modelBuilder.Entity<SupportTicketMessage>()

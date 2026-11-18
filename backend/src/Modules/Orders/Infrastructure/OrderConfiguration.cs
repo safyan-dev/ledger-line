@@ -25,7 +25,10 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(order => order.CustomerReference)
             .HasMaxLength(64);
 
-        builder.HasIndex(order => order.CustomerReference);
+        // Enforce reference uniqueness
+        builder.HasIndex(order => new { order.TenantId, order.CustomerReference })
+            .IsUnique()
+            .HasFilter("customer_reference IS NOT NULL");
 
         builder.Property(order => order.Description)
             .HasMaxLength(400);
