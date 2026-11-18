@@ -67,6 +67,7 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--web.enable-lifecycle"
+      - "--web.enable-remote-write-receiver" # accepts live k6 load-test metrics from perf/run-fleet.sh
     depends_on:
       - otel-collector #scrapts the collector after every 5s
     ports:
