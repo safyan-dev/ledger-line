@@ -54,8 +54,7 @@ public sealed class AccountTests(LedgerlineAppFactory factory)
             JsonContent.Create(new { newEmail })));
 
         Assert.Equal(HttpStatusCode.OK, requested.StatusCode);
-        var requestedBody = await requested.Content.ReadFromJsonAsync<JsonElement>();
-        var token = requestedBody.GetProperty("verificationToken").GetString();
+        var token = TestEmailSender.LatestToken(newEmail, "Confirm your email change");
         Assert.False(string.IsNullOrWhiteSpace(token));
 
         var confirmed = await client.SendAsync(client.Authorized(

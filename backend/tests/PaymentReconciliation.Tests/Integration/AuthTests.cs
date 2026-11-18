@@ -37,12 +37,16 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
 
         Assert.Equal(HttpStatusCode.Forbidden, withoutSlug.StatusCode);
 
-        var withSlug = await client.PostAsJsonAsync("/api/auth/login", new
+        var withSlugRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
         {
-            email,
-            password = "TenantPass123!",
-            tenantSlug = session.TenantSlug
-        });
+            Content = JsonContent.Create(new
+            {
+                email,
+                password = "TenantPass123!"
+            })
+        };
+        withSlugRequest.Headers.Host = $"{session.TenantSlug}.localhost";
+        var withSlug = await client.SendAsync(withSlugRequest);
 
         withSlug.EnsureSuccessStatusCode();
         var body = await withSlug.Content.ReadFromJsonAsync<JsonElement>();
@@ -124,21 +128,17 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
 
         for (var attempt = 0; attempt < 5; attempt++)
         {
-            var failed = await client.PostAsJsonAsync("/api/auth/login", new
-            {
+            var failed = await client.LoginRequestAsync(
                 email,
-                password = "WrongPass123!",
-                tenantSlug = session.TenantSlug
-            });
+                "WrongPass123!",
+                session.TenantSlug);
             Assert.Equal(HttpStatusCode.Unauthorized, failed.StatusCode);
         }
 
-        var locked = await client.PostAsJsonAsync("/api/auth/login", new
-        {
+        var locked = await client.LoginRequestAsync(
             email,
-            password = "TenantPass123!",
-            tenantSlug = session.TenantSlug
-        });
+            "TenantPass123!",
+            session.TenantSlug);
 
         Assert.Equal(HttpStatusCode.Unauthorized, locked.StatusCode);
         var body = await locked.Content.ReadFromJsonAsync<JsonElement>();
@@ -199,7 +199,7 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
 
         var forgot = await client.PostAsJsonAsync("/api/auth/forgot-password", new { email });
         forgot.EnsureSuccessStatusCode();
-        var token = (await forgot.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("resetToken").GetString();
+        var token = TestEmailSender.LatestToken(email, "Reset your password");
         Assert.False(string.IsNullOrWhiteSpace(token));
 
         var reset = await client.PostAsJsonAsync("/api/auth/reset-password", new
@@ -218,12 +218,10 @@ public sealed class AuthTests(LedgerlineAppFactory factory)
         });
         Assert.Equal(HttpStatusCode.BadRequest, reuse.StatusCode);
 
-        var login = await client.PostAsJsonAsync("/api/auth/login", new
-        {
+        var login = await client.LoginRequestAsync(
             email,
-            password = "ResetPass123!",
-            tenantSlug = session.TenantSlug
-        });
+            "ResetPass123!",
+            session.TenantSlug);
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
     }
 

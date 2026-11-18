@@ -120,9 +120,7 @@ public sealed class UsageLimitTests(LedgerlineAppFactory factory)
                 JsonContent.Create(new { email = inviteeEmail, role = "Finance" })));
             Assert.Equal(HttpStatusCode.OK, invitation.StatusCode);
 
-            var token = (await invitation.Content.ReadFromJsonAsync<JsonElement>())
-                .GetProperty("token")
-                .GetString();
+            var token = TestEmailSender.LatestToken(inviteeEmail, "Invitation to");
 
             var blocked = await client.PostAsJsonAsync("/api/invitations/accept", new
             {

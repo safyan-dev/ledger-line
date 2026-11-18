@@ -1,11 +1,14 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using PaymentReconciliation.Modules.Identity.Domain;
 using PaymentReconciliation.Persistence;
+using PaymentReconciliation.SharedKernel.Abstractions;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -54,6 +57,7 @@ public sealed class LedgerlineAppFactory : WebApplicationFactory<Program>, IAsyn
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
+        TestEmailSender.Clear();
         SetTestEnvironment("ConnectionStrings__Database", ConnectionString);
         SetTestEnvironment("Database__SeedDemoData", "false");
         SetTestEnvironment("Jwt__Issuer", "ledgerline-tests");
@@ -63,6 +67,10 @@ public sealed class LedgerlineAppFactory : WebApplicationFactory<Program>, IAsyn
         SetTestEnvironment("Jwt__RefreshTokenDays", "7");
         SetTestEnvironment("Webhooks__SigningSecret", "whsec_test_ledgerline");
         SetTestEnvironment("Webhooks__Providers__mock__SigningSecret", "whsec_test_ledgerline");
+        SetTestEnvironment("RateLimiting__GlobalPermitLimit", "100000");
+        SetTestEnvironment("RateLimiting__GlobalWindowSeconds", "60");
+        SetTestEnvironment("RateLimiting__RegistrationPermitLimit", "1000");
+        SetTestEnvironment("RateLimiting__RegistrationWindowSeconds", "3600");
         SetTestEnvironment("RateLimiting__AuthPermitLimit", "1000");
         SetTestEnvironment("RateLimiting__AuthWindowSeconds", "60");
 
@@ -107,6 +115,13 @@ public sealed class LedgerlineAppFactory : WebApplicationFactory<Program>, IAsyn
                 ["RateLimiting:AuthPermitLimit"] = "1000",
                 ["RateLimiting:AuthWindowSeconds"] = "60"
             });
+        });
+        builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<IEmailSender, TestEmailSender>();
+            services.RemoveAll<IWebhookSecretStore>();
+            services.AddSingleton<IWebhookSecretStore, TestWebhookSecretStore>();
         });
     }
 }

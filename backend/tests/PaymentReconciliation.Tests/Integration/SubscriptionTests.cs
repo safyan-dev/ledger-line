@@ -49,7 +49,7 @@ public sealed class SubscriptionTests(LedgerlineAppFactory factory)
         var session = await client.RegisterTenantAsync(NewSlug("subupgrade"));
 
         var before = await GetEntitlementsAsync(client, session);
-        var apiAccessBefore = FindFeature(before, "api_access");
+        var advancedBefore = FindFeature(before, "reconciliation.advanced");
 
         var upgraded = await ChangePlanAsync(client, session, "growth");
         Assert.Equal(HttpStatusCode.OK, upgraded.StatusCode);
@@ -58,8 +58,8 @@ public sealed class SubscriptionTests(LedgerlineAppFactory factory)
         var after = await GetEntitlementsAsync(client, session);
 
         Assert.Equal("growth", subscription.GetProperty("planCode").GetString());
-        Assert.False(apiAccessBefore.GetProperty("included").GetBoolean());
-        Assert.True(FindFeature(after, "api_access").GetProperty("included").GetBoolean());
+        Assert.False(advancedBefore.GetProperty("included").GetBoolean());
+        Assert.True(FindFeature(after, "reconciliation.advanced").GetProperty("included").GetBoolean());
     }
 
     [Fact]

@@ -28,7 +28,7 @@ public sealed class InvitationTests(LedgerlineAppFactory factory)
         Assert.Equal("Finance", invitation.GetProperty("role").GetString());
         Assert.Equal("Pending", invitation.GetProperty("status").GetString());
 
-        var token = createdBody.GetProperty("token").GetString();
+        var token = TestEmailSender.LatestToken(email, "Invitation to");
         Assert.False(string.IsNullOrWhiteSpace(token));
 
         var accepted = await client.PostAsJsonAsync("/api/invitations/accept", new
@@ -69,7 +69,7 @@ public sealed class InvitationTests(LedgerlineAppFactory factory)
         var email = Email(existing);
 
         var created = await InviteAsync(client, owner, email, "Finance");
-        var token = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString();
+        var token = TestEmailSender.LatestToken(email, "Invitation to");
 
         var anonymous = await client.PostAsJsonAsync("/api/invitations/accept", new { token });
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
@@ -124,8 +124,9 @@ public sealed class InvitationTests(LedgerlineAppFactory factory)
     {
         var client = factory.CreateClient();
         var owner = await client.RegisterTenantAsync(NewSlug("invsingle"));
-        var created = await InviteAsync(client, owner, $"single-{Guid.NewGuid():N}@example.test", "Finance");
-        var token = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString();
+        var email = $"single-{Guid.NewGuid():N}@example.test";
+        var created = await InviteAsync(client, owner, email, "Finance");
+        var token = TestEmailSender.LatestToken(email, "Invitation to");
 
         var first = await client.PostAsJsonAsync("/api/invitations/accept", new
         {
@@ -149,10 +150,11 @@ public sealed class InvitationTests(LedgerlineAppFactory factory)
     {
         var client = factory.CreateClient();
         var owner = await client.RegisterTenantAsync(NewSlug("invexpired"));
-        var created = await InviteAsync(client, owner, $"expired-{Guid.NewGuid():N}@example.test", "Finance");
+        var email = $"expired-{Guid.NewGuid():N}@example.test";
+        var created = await InviteAsync(client, owner, email, "Finance");
         var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
         var invitationId = createdBody.GetProperty("invitation").GetProperty("id").GetGuid();
-        var token = createdBody.GetProperty("token").GetString();
+        var token = TestEmailSender.LatestToken(email, "Invitation to");
 
         await ExpireInvitationAsync(invitationId);
 
@@ -176,7 +178,7 @@ public sealed class InvitationTests(LedgerlineAppFactory factory)
         var created = await InviteAsync(client, owner, email, "Finance");
         var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
         var invitationId = createdBody.GetProperty("invitation").GetProperty("id").GetGuid();
-        var revokedToken = createdBody.GetProperty("token").GetString();
+        var revokedToken = TestEmailSender.LatestToken(email, "Invitation to");
 
         var revoked = await client.SendAsync(client.Authorized(
             HttpMethod.Post,
@@ -192,10 +194,11 @@ public sealed class InvitationTests(LedgerlineAppFactory factory)
         });
         Assert.Equal(HttpStatusCode.Conflict, revokedAccept.StatusCode);
 
-        var second = await InviteAsync(client, owner, $"rotate-{Guid.NewGuid():N}@example.test", "Finance");
+        var rotateEmail = $"rotate-{Guid.NewGuid():N}@example.test";
+        var second = await InviteAsync(client, owner, rotateEmail, "Finance");
         var secondBody = await second.Content.ReadFromJsonAsync<JsonElement>();
         var secondId = secondBody.GetProperty("invitation").GetProperty("id").GetGuid();
-        var oldToken = secondBody.GetProperty("token").GetString();
+        var oldToken = TestEmailSender.LatestToken(rotateEmail, "Invitation to");
 
         var resent = await client.SendAsync(client.Authorized(
             HttpMethod.Post,
@@ -203,8 +206,7 @@ public sealed class InvitationTests(LedgerlineAppFactory factory)
             owner));
         Assert.Equal(HttpStatusCode.OK, resent.StatusCode);
 
-        var resentBody = await resent.Content.ReadFromJsonAsync<JsonElement>();
-        var newToken = resentBody.GetProperty("token").GetString();
+        var newToken = TestEmailSender.LatestToken(rotateEmail, "Invitation to");
         Assert.NotEqual(oldToken, newToken);
 
         var oldTokenAccept = await client.PostAsJsonAsync("/api/invitations/accept", new

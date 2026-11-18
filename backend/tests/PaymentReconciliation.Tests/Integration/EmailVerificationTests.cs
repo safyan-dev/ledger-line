@@ -29,15 +29,11 @@ public sealed class EmailVerificationTests(LedgerlineAppFactory factory)
         var body = await registration.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(JsonValueKind.Null, body.GetProperty("session").ValueKind);
         Assert.True(body.GetProperty("emailVerificationRequired").GetBoolean());
-        var token = body.GetProperty("emailVerificationToken").GetString();
+        Assert.False(body.TryGetProperty("emailVerificationToken", out _));
+        var token = TestEmailSender.LatestToken(email, "Confirm your email");
         Assert.False(string.IsNullOrWhiteSpace(token));
 
-        var loginBefore = await client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email,
-            password = "TenantPass123!",
-            tenantSlug = slug
-        });
+        var loginBefore = await client.LoginRequestAsync(email, "TenantPass123!", slug);
         Assert.Equal(HttpStatusCode.Forbidden, loginBefore.StatusCode);
         var loginBody = await loginBefore.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("auth.email_not_confirmed", loginBody.GetProperty("code").GetString());
@@ -45,12 +41,7 @@ public sealed class EmailVerificationTests(LedgerlineAppFactory factory)
         var confirm = await client.PostAsJsonAsync("/api/auth/confirm-email", new { email, token });
         Assert.Equal(HttpStatusCode.OK, confirm.StatusCode);
 
-        var loginAfter = await client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email,
-            password = "TenantPass123!",
-            tenantSlug = slug
-        });
+        var loginAfter = await client.LoginRequestAsync(email, "TenantPass123!", slug);
         Assert.Equal(HttpStatusCode.OK, loginAfter.StatusCode);
         var loginAfterBody = await loginAfter.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(loginAfterBody.GetProperty("user").GetProperty("emailConfirmed").GetBoolean());
@@ -66,9 +57,7 @@ public sealed class EmailVerificationTests(LedgerlineAppFactory factory)
             email = $"unknown-{Guid.NewGuid():N}@example.test"
         });
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(JsonValueKind.Null, body.GetProperty("verificationToken").ValueKind);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
     private static string NewSlug(string prefix)

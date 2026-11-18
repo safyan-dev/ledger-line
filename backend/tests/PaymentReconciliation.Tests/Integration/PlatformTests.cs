@@ -25,17 +25,20 @@ public sealed class PlatformTests(LedgerlineAppFactory factory)
         Assert.Equal(JsonValueKind.Null, body.GetProperty("tenant").ValueKind);
 
         var accessToken = body.GetProperty("accessToken").GetString();
-        var tenants = new HttpRequestMessage(HttpMethod.Get, "/api/platform/tenants");
+        var tenants = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/platform/tenants?search={Uri.EscapeDataString(tenant.TenantSlug)}");
         tenants.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var tenantsResponse = await client.SendAsync(tenants);
 
         Assert.Equal(HttpStatusCode.OK, tenantsResponse.StatusCode);
         var tenantsBody = await tenantsResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var tenantItems = tenantsBody.GetProperty("items");
         Assert.Contains(
-            tenantsBody.EnumerateArray(),
+            tenantItems.EnumerateArray(),
             item => item.GetProperty("slug").GetString() == tenant.TenantSlug);
         Assert.Contains(
-            tenantsBody.EnumerateArray(),
+            tenantItems.EnumerateArray(),
             item => item.GetProperty("slug").GetString() == tenant.TenantSlug
                     && item.GetProperty("ownerEmail").GetString() == $"owner@{tenant.TenantSlug}.test");
     }
@@ -152,6 +155,16 @@ public sealed class PlatformTests(LedgerlineAppFactory factory)
         Assert.Equal("Manual", changed.GetProperty("activationSource").GetString());
         Assert.False(changed.GetProperty("paymentConfirmed").GetBoolean());
 
+        var missingPlan = await SendAsPlatformAdminAsync(
+            client,
+            token,
+            HttpMethod.Put,
+            $"/api/platform/subscriptions/{subscriptionId}/plan",
+            JsonContent.Create(new { planCode = (string?)null }));
+        Assert.Equal(HttpStatusCode.BadRequest, missingPlan.StatusCode);
+        var missingPlanBody = await missingPlan.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("plan.required", missingPlanBody.GetProperty("code").GetString());
+
         var extended = await SendAsPlatformAdminAsync(
             client,
             token,
@@ -181,7 +194,7 @@ public sealed class PlatformTests(LedgerlineAppFactory factory)
     public async Task Platform_admin_can_view_and_reply_to_tenant_support_tickets()
     {
         var client = factory.CreateClient();
-        var tenant = await client.RegisterTenantAsync(NewSlug("platformsupport"));
+        var tenant = await client.RegisterTenantAsync(NewSlug("platformsupport"), "business");
         var createTicket = await client.SendAsync(client.Authorized(
             HttpMethod.Post,
             "/api/support/tickets",
@@ -263,12 +276,10 @@ public sealed class PlatformTests(LedgerlineAppFactory factory)
         var first = await client.RegisterTenantAsync(NewSlug("platformwrongA"));
         var second = await client.RegisterTenantAsync(NewSlug("platformwrongB"));
 
-        var response = await client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email = $"owner@{first.TenantSlug}.test",
-            password = "TenantPass123!",
-            tenantSlug = second.TenantSlug
-        });
+        var response = await client.LoginRequestAsync(
+            $"owner@{first.TenantSlug}.test",
+            "TenantPass123!",
+            second.TenantSlug);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();

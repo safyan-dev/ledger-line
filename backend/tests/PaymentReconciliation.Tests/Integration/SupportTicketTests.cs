@@ -155,7 +155,7 @@ public sealed class SupportTicketTests(LedgerlineAppFactory factory)
     public async Task Tickets_support_filtering_and_pagination()
     {
         var client = factory.CreateClient();
-        var owner = await client.RegisterTenantAsync(NewSlug("supportfilter"));
+        var owner = await client.RegisterTenantAsync(NewSlug("supportfilter"), "business");
 
         await CreateTicketAsync(client, owner, "Technical", "Technical issue.", category: "TechnicalIssue", priority: "Low");
         await CreateTicketAsync(client, owner, "Payment", "Payment issue.", category: "PaymentIssue", priority: "High");

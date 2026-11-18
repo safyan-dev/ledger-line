@@ -42,13 +42,12 @@ public static class TestClientExtensions
                 await client.GetUserIdAsync(accessToken));
         }
 
-        var token = body.GetProperty("emailVerificationToken").GetString();
+        var token = TestEmailSender.LatestToken(email, "Confirm your email");
         if (string.IsNullOrWhiteSpace(token))
         {
             var resend = await client.PostAsJsonAsync("/api/auth/resend-confirmation", new { email });
             resend.EnsureSuccessStatusCode();
-            var resendBody = await resend.Content.ReadFromJsonAsync<JsonElement>();
-            token = resendBody.GetProperty("verificationToken").GetString();
+            token = TestEmailSender.LatestToken(email, "Confirm your email");
         }
 
         if (string.IsNullOrWhiteSpace(token))
@@ -62,14 +61,28 @@ public static class TestClientExtensions
         return await client.LoginAsync(email, tenantId, tenantSlug);
     }
 
+    public static Task<HttpResponseMessage> LoginRequestAsync(
+        this HttpClient client,
+        string email,
+        string password,
+        string? tenantSlug = null)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+        {
+            Content = JsonContent.Create(new { email, password })
+        };
+
+        if (tenantSlug is not null)
+        {
+            request.Headers.Host = $"{tenantSlug}.localhost";
+        }
+
+        return client.SendAsync(request);
+    }
+
     public static async Task<TestSession> LoginAsync(this HttpClient client, string email, Guid tenantId, string tenantSlug)
     {
-        var response = await client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email,
-            password = "TenantPass123!",
-            tenantSlug
-        });
+        var response = await client.LoginRequestAsync(email, "TenantPass123!", tenantSlug);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var accessToken = body.GetProperty("accessToken").GetString()!;
