@@ -10,11 +10,11 @@ public sealed class PlanSeeder(IAppDbContext dbContext, IUnitOfWork unitOfWork)
     [
         ("reconciliation.basic", "Basic reconciliation", "Reference and amount matching for everyday payment review."),
         ("reconciliation.advanced", "Advanced reconciliation", "Multi-strategy matching with mismatch classification."),
-        ("api_access", "API access", "Programmatic access to orders, payments and reconciliation."),
         ("csv_export", "CSV export", "Export records for Finance systems and spreadsheets."),
-        ("custom_roles", "Custom roles", "Owner, TenantAdmin and Finance roles for team permissions."),
         ("priority_support", "Priority support", "Prioritised support for high-volume operations.")
     ];
+
+    private static readonly string[] ObsoleteFeatureKeys = ["api_access", "custom_roles"];
 
     private static readonly PlanDefinition[] PlanDefinitions =
     [
@@ -30,9 +30,7 @@ public sealed class PlanSeeder(IAppDbContext dbContext, IUnitOfWork unitOfWork)
             [
                 ("reconciliation.basic", true, null),
                 ("reconciliation.advanced", false, null),
-                ("api_access", false, null),
                 ("csv_export", false, null),
-                ("custom_roles", false, null),
                 ("priority_support", false, null)
             ],
             [
@@ -53,9 +51,7 @@ public sealed class PlanSeeder(IAppDbContext dbContext, IUnitOfWork unitOfWork)
             [
                 ("reconciliation.basic", false, "Included in advanced"),
                 ("reconciliation.advanced", true, null),
-                ("api_access", true, null),
                 ("csv_export", true, null),
-                ("custom_roles", false, null),
                 ("priority_support", false, null)
             ],
             [
@@ -76,9 +72,7 @@ public sealed class PlanSeeder(IAppDbContext dbContext, IUnitOfWork unitOfWork)
             [
                 ("reconciliation.basic", false, "Included in advanced"),
                 ("reconciliation.advanced", true, null),
-                ("api_access", true, null),
                 ("csv_export", true, null),
-                ("custom_roles", true, null),
                 ("priority_support", true, null)
             ],
             [
@@ -92,6 +86,23 @@ public sealed class PlanSeeder(IAppDbContext dbContext, IUnitOfWork unitOfWork)
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         var features = await dbContext.Set<Feature>().ToListAsync(cancellationToken);
+        var obsoleteFeatures = features
+            .Where(feature => ObsoleteFeatureKeys.Contains(feature.Key, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        if (obsoleteFeatures.Count > 0)
+        {
+            var obsoleteIds = obsoleteFeatures.Select(feature => feature.Id).ToList();
+            var obsoletePlanFeatures = await dbContext.Set<PlanFeature>()
+                .Where(planFeature => obsoleteIds.Contains(planFeature.FeatureId))
+                .ToListAsync(cancellationToken);
+
+            dbContext.Set<PlanFeature>().RemoveRange(obsoletePlanFeatures);
+            dbContext.Set<Feature>().RemoveRange(obsoleteFeatures);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            features = features.Except(obsoleteFeatures).ToList();
+        }
+
         var featuresByKey = features.ToDictionary(feature => feature.Key, StringComparer.OrdinalIgnoreCase);
 
         foreach (var (key, name, description) in FeatureDefinitions)

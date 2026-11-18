@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using PaymentReconciliation.Modules.Tenancy.Application;
 using PaymentReconciliation.Modules.Tenancy.Contracts;
@@ -24,6 +25,7 @@ public static class TenantEndpoints
             return result.ToHttpResult();
         })
         .AllowAnonymous()
+        .RequireRateLimiting("registration")
         .WithName("RegisterTenant")
         .Produces<RegisterTenantResponse>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -233,6 +235,63 @@ public static class TenantEndpoints
         .WithName("CurrentEntitlements")
         .Produces<EntitlementsDto>()
         .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/current/webhook-secrets/{provider}", async (
+            string provider,
+            ITenantContext tenantContext,
+            IWebhookSecretStore secretStore,
+            CancellationToken cancellationToken) =>
+        {
+            if (tenantContext.TenantId is not { } tenantId)
+            {
+                return Results.Forbid();
+            }
+
+            var secret = await secretStore.GetSecretAsync(tenantId, provider, cancellationToken);
+            return secret is null
+                ? Results.NotFound()
+                : Results.Ok(new WebhookSecretDto(provider.Trim().ToLowerInvariant(), secret));
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .RequireTenantPermission(TenantPermission.ManageWorkspaceSettings)
+        .WithName("GetWebhookSecret")
+        .Produces<WebhookSecretDto>()
+        .ProducesProblem(StatusCodes.Status403Forbidden)
+        .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPost("/current/webhook-secrets/{provider}/rotate", async (
+            string provider,
+            ITenantContext tenantContext,
+            IWebhookSecretStore secretStore,
+            CancellationToken cancellationToken) =>
+        {
+            if (tenantContext.TenantId is not { } tenantId)
+            {
+                return Results.Forbid();
+            }
+
+            var normalizedProvider = provider.Trim().ToLowerInvariant();
+            if (normalizedProvider is not ("mock" or "stripe"))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["provider"] = ["Provider must be mock or stripe."]
+                });
+            }
+
+            var secret = await secretStore.RotateSecretAsync(
+                tenantId,
+                normalizedProvider,
+                cancellationToken);
+
+            return Results.Ok(new WebhookSecretDto(normalizedProvider, secret));
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .RequireTenantPermission(TenantPermission.ManageWorkspaceSettings)
+        .WithName("RotateWebhookSecret")
+        .Produces<WebhookSecretDto>()
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapDelete("/current/members/{userId:guid}", async (
             Guid userId,

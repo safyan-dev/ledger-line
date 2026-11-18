@@ -194,6 +194,13 @@ public sealed class ChangePlatformSubscriptionPlanHandler(
         ChangePlatformSubscriptionPlanCommand command,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(command.PlanCode))
+        {
+            return Result.Failure<PlatformSubscriptionDto>(Error.Validation(
+                "plan.required",
+                "A plan code is required."));
+        }
+
         var subscription = await PlatformSubscriptionRows.FindSubscription(dbContext, command.SubscriptionId, cancellationToken);
         if (subscription is null)
         {
@@ -202,9 +209,10 @@ public sealed class ChangePlatformSubscriptionPlanHandler(
                 "The subscription was not found."));
         }
 
+        var planCode = command.PlanCode.Trim().ToLowerInvariant();
         var targetPlan = await dbContext.Set<Plan>()
             .FirstOrDefaultAsync(
-                plan => plan.Code == command.PlanCode.ToLowerInvariant() && plan.IsActive,
+                plan => plan.Code == planCode && plan.IsActive,
                 cancellationToken);
         if (targetPlan is null)
         {

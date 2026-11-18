@@ -85,9 +85,9 @@ public sealed class Tenant : AggregateRoot
         }
 
         var normalizedSlug = NormalizeSlug(slug);
-        if (normalizedSlug.Length is < 2 or > 40)
+        if (!IsValidSlug(normalizedSlug))
         {
-            throw new DomainException("Tenant slug must be between 2 and 40 characters.");
+            throw new DomainException("Tenant slug is invalid or reserved.");
         }
 
         var now = createdAt ?? DateTimeOffset.UtcNow;
@@ -207,14 +207,30 @@ public sealed class Tenant : AggregateRoot
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    private static readonly HashSet<string> ReservedSlugs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "admin",
+        "api",
+        "app",
+        "mail",
+        "platform",
+        "support",
+        "www"
+    };
+
     public static string NormalizeSlug(string slug)
         => slug.Trim().ToLowerInvariant();
 
     public static bool IsValidSlug(string slug)
     {
+        // Limit tenant slugs
         var normalized = NormalizeSlug(slug);
         return normalized.Length is >= 2 and <= 40
-               && normalized.All(character => char.IsLetterOrDigit(character) || character == '-')
+               && !ReservedSlugs.Contains(normalized)
+               && normalized.All(character =>
+                   (character >= 'a' && character <= 'z')
+                   || (character >= '0' && character <= '9')
+                   || character == '-')
                && char.IsLetterOrDigit(normalized[0])
                && char.IsLetterOrDigit(normalized[^1]);
     }

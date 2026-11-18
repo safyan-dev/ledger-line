@@ -7,6 +7,7 @@ using PaymentReconciliation.Modules.Tenancy.Application;
 using PaymentReconciliation.Modules.Tenancy.Domain;
 using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Cqrs;
+using PaymentReconciliation.SharedKernel.Results;
 using PaymentReconciliation.SharedKernel.Web;
 using PaymentReconciliation.Persistence.Abstractions;
 
@@ -42,15 +43,25 @@ public static class PlatformEndpoints
         .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapGet("/tenants", async (
+            int? page,
+            int? pageSize,
+            string? search,
+            string? status,
             IDispatcher dispatcher,
             CancellationToken cancellationToken) =>
         {
-            var result = await dispatcher.SendAsync(new GetPlatformTenantsQuery(), cancellationToken);
+            var result = await dispatcher.SendAsync(
+                new GetPlatformTenantsQuery(
+                    page ?? 1,
+                    pageSize ?? 25,
+                    search,
+                    status),
+                cancellationToken);
             return result.ToHttpResult();
         })
         .RequireAuthorization(AuthorizationPolicies.PlatformAdmin)
         .WithName("PlatformTenants")
-        .Produces<IReadOnlyList<PlatformTenantDto>>()
+        .Produces<PagedResult<PlatformTenantDto>>()
         .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapGet("/tenants/{tenantId:guid}", async (
@@ -80,7 +91,7 @@ public static class PlatformEndpoints
                 .FirstOrDefaultAsync(candidate => candidate.Id == tenantId, cancellationToken);
             if (tenant is null)
             {
-                return Results.NotFound();
+                return Error.NotFound("tenant.not_found", "The tenant was not found.").ToProblemResult();
             }
 
             var previousStatus = tenant.Status.ToString();
@@ -94,10 +105,9 @@ public static class PlatformEndpoints
             }
             else
             {
-                return Results.ValidationProblem(new Dictionary<string, string[]>
-                {
-                    ["status"] = ["Status must be Active or Suspended."]
-                });
+                return Error.Validation(
+                    "tenant.invalid_status",
+                    "Status must be Active or Suspended.").ToProblemResult();
             }
 
             audit.Add(new PlatformAuditRecord(
@@ -157,7 +167,7 @@ public static class PlatformEndpoints
                 .FirstOrDefaultAsync(candidate => candidate.Code == code.ToLower(), cancellationToken);
             if (plan is null)
             {
-                return Results.NotFound();
+                return Error.NotFound("plan.not_found", "The plan was not found.").ToProblemResult();
             }
 
             var previous = plan.IsActive;
@@ -193,14 +203,14 @@ public static class PlatformEndpoints
                 .FirstOrDefaultAsync(candidate => candidate.Code == code.ToLower(), cancellationToken);
             if (plan is null)
             {
-                return Results.NotFound();
+                return Error.NotFound("plan.not_found", "The plan was not found.").ToProblemResult();
             }
 
             var feature = plan.Features.FirstOrDefault(candidate =>
                 string.Equals(candidate.Feature!.Key, featureKey, StringComparison.OrdinalIgnoreCase));
             if (feature is null)
             {
-                return Results.NotFound();
+                return Error.NotFound("plan.feature_not_found", "The plan feature was not found.").ToProblemResult();
             }
 
             var previous = feature.IsIncluded;
@@ -241,22 +251,21 @@ public static class PlatformEndpoints
                 .FirstOrDefaultAsync(candidate => candidate.Code == code.ToLower(), cancellationToken);
             if (plan is null)
             {
-                return Results.NotFound();
+                return Error.NotFound("plan.not_found", "The plan was not found.").ToProblemResult();
             }
 
             var limit = plan.Limits.FirstOrDefault(candidate =>
                 string.Equals(candidate.Key, limitKey, StringComparison.OrdinalIgnoreCase));
             if (limit is null)
             {
-                return Results.NotFound();
+                return Error.NotFound("plan.limit_not_found", "The plan limit was not found.").ToProblemResult();
             }
 
             if (request.Value is < 0)
             {
-                return Results.ValidationProblem(new Dictionary<string, string[]>
-                {
-                    ["value"] = ["Usage limits cannot be negative."]
-                });
+                return Error.Validation(
+                    "plan.invalid_limit",
+                    "Usage limits cannot be negative.").ToProblemResult();
             }
 
             var previous = limit.Value;

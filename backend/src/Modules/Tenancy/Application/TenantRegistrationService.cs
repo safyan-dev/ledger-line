@@ -12,7 +12,8 @@ public sealed class TenantRegistrationService(
     IPlanCatalog planCatalog,
     IAppDbContext dbContext,
     IUnitOfWork unitOfWork,
-    ITenantContext tenantContext)
+    ITenantContext tenantContext,
+    IWebhookSecretStore webhookSecrets)
 {
     public async Task<Result<RegisterTenantResponse>> RegisterAsync(
         RegisterTenantRequest request,
@@ -60,17 +61,18 @@ public sealed class TenantRegistrationService(
 
         var now = DateTimeOffset.UtcNow;
         var tenant = Tenant.Create(request.CompanyName, slug, now);
-        var membership = TenantUser.Create(tenant.Id, user.Value.User.Id, TenantRole.Owner);
+        var membership = TenantUser.Create(tenant.Id, user.Value.Id, TenantRole.Owner);
 
         tenantContext.Set(new TenantContextSnapshot(
             tenant.Id,
             tenant.Slug,
-            user.Value.User.Id,
+            user.Value.Id,
             TenantRole.Owner.ToString(),
-            user.Value.User.IsPlatformAdmin));
+            user.Value.IsPlatformAdmin));
 
         dbContext.Set<Tenant>().Add(tenant);
         dbContext.Set<TenantUser>().Add(membership);
+        await webhookSecrets.EnsureSecretsAsync(tenant.Id, cancellationToken);
 
         var activation = plan.IsFree ? SubscriptionActivation.Free : SubscriptionActivation.Simulated;
         var subscription = Subscription.Provision(tenant.Id, plan.Id, plan.IsFree, activation, now);
@@ -89,9 +91,9 @@ public sealed class TenantRegistrationService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         TenantSessionDto? session = null;
-        if (user.Value.User.EmailConfirmed)
+        if (user.Value.EmailConfirmed)
         {
-            var issued = await identity.IssueSessionAsync(user.Value.User.Id, cancellationToken);
+            var issued = await identity.IssueSessionAsync(user.Value.Id, cancellationToken);
             if (issued.IsFailure)
             {
                 await transaction.RollbackAsync(cancellationToken);
@@ -113,7 +115,6 @@ public sealed class TenantRegistrationService(
             new TenantDto(tenant.Id, tenant.Name, tenant.Slug, membership.Role.ToString()),
             plan.Code,
             plan.Name,
-            EmailVerificationRequired: !user.Value.User.EmailConfirmed,
-            EmailVerificationToken: user.Value.EmailVerificationToken));
+            EmailVerificationRequired: !user.Value.EmailConfirmed));
     }
 }

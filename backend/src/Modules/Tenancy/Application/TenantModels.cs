@@ -24,7 +24,8 @@ public sealed record RegisterTenantResponse(
     TenantDto Tenant,
     string PlanCode,
     string PlanName,
-    bool EmailVerificationRequired,
-    string? EmailVerificationToken);
+    bool EmailVerificationRequired);
 
 public sealed record MembershipDto(Guid TenantId, string Name, string Slug, string Role);
+
+public sealed record WebhookSecretDto(string Provider, string Secret);

@@ -12,8 +12,7 @@ public sealed record TenantInvitationDto(
     DateTimeOffset LastSentAt);
 
 public sealed record IssuedTenantInvitationDto(
-    TenantInvitationDto Invitation,
-    string? Token);
+    TenantInvitationDto Invitation);
 
 public sealed record CreateTenantInvitationRequest(string Email, string Role);
 

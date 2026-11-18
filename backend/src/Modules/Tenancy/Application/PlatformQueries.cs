@@ -3,6 +3,7 @@ using PaymentReconciliation.Modules.Identity.Contracts;
 using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.Modules.Tenancy.Domain;
 using PaymentReconciliation.Persistence.Abstractions;
+using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Cqrs;
 using PaymentReconciliation.SharedKernel.Results;
 
@@ -158,24 +159,60 @@ public sealed class GetPlatformDashboardHandler(
     }
 }
 
-public sealed record GetPlatformTenantsQuery : IQuery<IReadOnlyList<PlatformTenantDto>>;
+public sealed record GetPlatformTenantsQuery(
+    int Page = 1,
+    int PageSize = 25,
+    string? Search = null,
+    string? Status = null) : IQuery<PagedResult<PlatformTenantDto>>;
 
 public sealed class GetPlatformTenantsHandler(
     IAppDbContext dbContext,
     IIdentityFacade identityFacade)
-    : IQueryHandler<GetPlatformTenantsQuery, IReadOnlyList<PlatformTenantDto>>
+    : IQueryHandler<GetPlatformTenantsQuery, PagedResult<PlatformTenantDto>>
 {
-    public async Task<Result<IReadOnlyList<PlatformTenantDto>>> Handle(
+    public async Task<Result<PagedResult<PlatformTenantDto>>> Handle(
         GetPlatformTenantsQuery query,
         CancellationToken cancellationToken)
     {
-        var tenants = await dbContext.Set<Tenant>()
-            .AsNoTracking()
+        // Paginate tenant list
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+        var tenantQuery = dbContext.Set<Tenant>().AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(query.Status))
+        {
+            if (!Enum.TryParse<TenantStatus>(query.Status, true, out var status)
+                || !Enum.IsDefined(status))
+            {
+                return Result.Failure<PagedResult<PlatformTenantDto>>(Error.Validation(
+                    "tenant.invalid_status",
+                    "Tenant status is invalid."));
+            }
+
+            tenantQuery = tenantQuery.Where(tenant => tenant.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            // Limit search length
+            var trimmed = query.Search.Trim();
+            var search = trimmed[..Math.Min(100, trimmed.Length)];
+            tenantQuery = tenantQuery.Where(tenant =>
+                tenant.Name.Contains(search)
+                || tenant.Slug.Contains(search));
+        }
+
+        var totalCount = await tenantQuery.CountAsync(cancellationToken);
+        var tenants = await tenantQuery
             .OrderBy(tenant => tenant.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
+        var tenantIds = tenants.Select(tenant => tenant.Id).ToArray();
 
         var memberships = await dbContext.Set<TenantUser>()
             .AsNoTracking()
+            .Where(membership => tenantIds.Contains(membership.TenantId))
             .Select(membership => new { membership.TenantId, membership.UserId, membership.Role })
             .ToListAsync(cancellationToken);
         var memberCounts = memberships
@@ -198,6 +235,7 @@ public sealed class GetPlatformTenantsHandler(
         var subscriptions = await dbContext.Set<Subscription>()
             .IgnoreQueryFilters()
             .AsNoTracking()
+            .Where(subscription => tenantIds.Contains(subscription.TenantId))
             .Select(subscription => new { subscription.TenantId, subscription.PlanId })
             .ToListAsync(cancellationToken);
 
@@ -233,7 +271,11 @@ public sealed class GetPlatformTenantsHandler(
             })
             .ToList();
 
-        return Result.Success<IReadOnlyList<PlatformTenantDto>>(items);
+        return Result.Success(PagedResult<PlatformTenantDto>.Create(
+            items,
+            page,
+            pageSize,
+            totalCount));
     }
 }
 

@@ -26,6 +26,8 @@ public static class TenancyModule
         services.AddScoped<IPlanCatalog, PlanCatalog>();
         services.AddScoped<PlanSeeder>();
         services.AddScoped<IEntitlementService, EntitlementService>();
+        services.AddScoped<IFeatureGate, FeatureGate>();
+        services.AddScoped<IWebhookSecretStore, WebhookSecretService>();
         services.AddScoped<ITenantAuthorizer, TenantAuthorizer>();
         services.AddScoped<UsageService>();
         services.AddScoped<IUsageService>(provider => provider.GetRequiredService<UsageService>());

@@ -1,6 +1,5 @@
 using System.Net.Mail;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
 using PaymentReconciliation.Modules.Identity.Contracts;
 using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.Modules.Tenancy.Domain;
@@ -103,8 +102,7 @@ public sealed class CreateTenantInvitationHandler(
     ICurrentUser currentUser,
     IIdentityFacade identity,
     ITenantAuthorizer authorizer,
-    IEmailSender emailSender,
-    IHostEnvironment environment)
+    IEmailSender emailSender)
     : ICommandHandler<CreateTenantInvitationCommand, IssuedTenantInvitationDto>
 {
     public async Task<Result<IssuedTenantInvitationDto>> Handle(
@@ -197,8 +195,7 @@ public sealed class CreateTenantInvitationHandler(
             await SendInvitationEmailAsync(tenant, pending.Email, role, token, cancellationToken);
 
             return Result.Success(new IssuedTenantInvitationDto(
-                GetTenantInvitationsHandler.ToDto(pending, now),
-                TokenFor(environment, token)));
+                GetTenantInvitationsHandler.ToDto(pending, now)));
         }
 
         var invitation = TenantInvitation.Create(
@@ -215,8 +212,7 @@ public sealed class CreateTenantInvitationHandler(
         await SendInvitationEmailAsync(tenant, invitation.Email, role, token, cancellationToken);
 
         return Result.Success(new IssuedTenantInvitationDto(
-            GetTenantInvitationsHandler.ToDto(invitation, now),
-            TokenFor(environment, token)));
+            GetTenantInvitationsHandler.ToDto(invitation, now)));
     }
 
     internal static bool TryNormalizeEmail(string? value, out string email)
@@ -242,9 +238,6 @@ public sealed class CreateTenantInvitationHandler(
         return true;
     }
 
-    private static string? TokenFor(IHostEnvironment environment, string token)
-        => environment.IsDevelopment() ? token : null;
-
     private Task SendInvitationEmailAsync(
         Tenant tenant,
         string email,
@@ -269,8 +262,7 @@ public sealed class ResendTenantInvitationHandler(
     ITenantContext tenantContext,
     ICurrentUser currentUser,
     ITenantAuthorizer authorizer,
-    IEmailSender emailSender,
-    IHostEnvironment environment)
+    IEmailSender emailSender)
     : ICommandHandler<ResendTenantInvitationCommand, IssuedTenantInvitationDto>
 {
     public async Task<Result<IssuedTenantInvitationDto>> Handle(
@@ -324,8 +316,7 @@ public sealed class ResendTenantInvitationHandler(
         await SendInvitationEmailAsync(tenant, invitation.Email, invitation.Role, token, cancellationToken);
 
         return Result.Success(new IssuedTenantInvitationDto(
-            GetTenantInvitationsHandler.ToDto(invitation, now),
-            environment.IsDevelopment() ? token : null));
+            GetTenantInvitationsHandler.ToDto(invitation, now)));
     }
 
     private Task SendInvitationEmailAsync(
@@ -610,8 +601,8 @@ public sealed class AcceptTenantInvitationHandler(
         }
 
         return Result.Success(new ResolvedUser(
-            created.Value.User.Id,
-            created.Value.User.DisplayName,
+            created.Value.Id,
+            created.Value.DisplayName,
             IsNewUser: true));
     }
 

@@ -93,6 +93,13 @@ public sealed class ChangeSubscriptionPlanHandler(
         ChangeSubscriptionPlanCommand command,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(command.PlanCode))
+        {
+            return Result.Failure<SubscriptionDto>(Error.Validation(
+                "plan.required",
+                "A plan code is required."));
+        }
+
         if (tenantContext.TenantId is not { } tenantId)
         {
             return Result.Failure<SubscriptionDto>(Error.Forbidden("tenant.required", "A tenant context is required."));
