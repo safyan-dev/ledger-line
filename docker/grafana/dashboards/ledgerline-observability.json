@@ -41,7 +41,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"ledgerline-api\",http_route!~\"/health.*\"}[5m]))",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\",http_route!~\"/health.*\"}[5m]))",
           "legendFormat": "value",
           "refId": "A",
           "instant": true,
@@ -102,7 +102,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(rate(http_server_request_duration_seconds_count{service_name=\"ledgerline-api\",http_response_status_code=~\"5..\",http_route!~\"/health.*\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_server_request_duration_seconds_count{service_name=\"ledgerline-api\",http_route!~\"/health.*\"}[5m])), 1)",
+          "expr": "(sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\",http_response_status_code=~\"5..\",http_route!~\"/health.*\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\",http_route!~\"/health.*\"}[5m])), 1)",
           "legendFormat": "value",
           "refId": "A",
           "instant": true,
@@ -171,7 +171,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (http_server_request_duration_seconds_bucket{service_name=\"ledgerline-api\",http_route!~\"/health.*\"}))",
+          "expr": "histogram_quantile(0.95, sum by (le) (http_server_request_duration_seconds_bucket{service_name=~\"$service\",http_route!~\"/health.*\"}))",
           "legendFormat": "value",
           "refId": "A",
           "instant": true,
@@ -240,7 +240,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.50, sum by (le) (http_server_request_duration_seconds_bucket{service_name=\"ledgerline-api\",http_route!~\"/health.*\"}))",
+          "expr": "histogram_quantile(0.50, sum by (le) (http_server_request_duration_seconds_bucket{service_name=~\"$service\",http_route!~\"/health.*\"}))",
           "legendFormat": "p50",
           "refId": "A"
         },
@@ -249,7 +249,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (http_server_request_duration_seconds_bucket{service_name=\"ledgerline-api\",http_route!~\"/health.*\"}))",
+          "expr": "histogram_quantile(0.95, sum by (le) (http_server_request_duration_seconds_bucket{service_name=~\"$service\",http_route!~\"/health.*\"}))",
           "legendFormat": "p95",
           "refId": "B"
         },
@@ -258,7 +258,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (http_server_request_duration_seconds_bucket{service_name=\"ledgerline-api\",http_route!~\"/health.*\"}))",
+          "expr": "histogram_quantile(0.99, sum by (le) (http_server_request_duration_seconds_bucket{service_name=~\"$service\",http_route!~\"/health.*\"}))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -313,7 +313,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (http_route) (rate(http_server_request_duration_seconds_count{service_name=\"ledgerline-api\",http_route!~\"/health.*\"}[5m]))",
+          "expr": "sum by (http_route) (rate(http_server_request_duration_seconds_count{service_name=~\"$service\",http_route!~\"/health.*\"}[5m]))",
           "legendFormat": "{{http_route}}",
           "refId": "A"
         }
@@ -368,7 +368,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(ledgerline_payments_successful_total{service_name=\"ledgerline-api\"}[5m]))",
+          "expr": "sum(rate(ledgerline_payments_successful_total{service_name=~\"$service\"}[5m]))",
           "legendFormat": "Successful",
           "refId": "A"
         },
@@ -377,7 +377,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(ledgerline_payments_failed_total{service_name=\"ledgerline-api\"}[5m]))",
+          "expr": "sum(rate(ledgerline_payments_failed_total{service_name=~\"$service\"}[5m]))",
           "legendFormat": "Failed",
           "refId": "B"
         }
@@ -432,7 +432,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(ledgerline_webhooks_received_total{service_name=\"ledgerline-api\"}[5m]))",
+          "expr": "sum(rate(ledgerline_webhooks_received_total{service_name=~\"$service\"}[5m]))",
           "legendFormat": "Received",
           "refId": "A"
         },
@@ -441,7 +441,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(ledgerline_webhooks_processed_total{service_name=\"ledgerline-api\"}[5m]))",
+          "expr": "sum(rate(ledgerline_webhooks_processed_total{service_name=~\"$service\"}[5m]))",
           "legendFormat": "Processed",
           "refId": "B"
         },
@@ -450,7 +450,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(ledgerline_webhooks_duplicates_ignored_total{service_name=\"ledgerline-api\"}[5m]))",
+          "expr": "sum(rate(ledgerline_webhooks_duplicates_ignored_total{service_name=~\"$service\"}[5m]))",
           "legendFormat": "Duplicates ignored",
           "refId": "C"
         },
@@ -459,7 +459,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(ledgerline_webhooks_processing_failures_total{service_name=\"ledgerline-api\"}[5m]))",
+          "expr": "sum(rate(ledgerline_webhooks_processing_failures_total{service_name=~\"$service\"}[5m]))",
           "legendFormat": "Processing failures",
           "refId": "D"
         }
@@ -514,7 +514,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.50, sum by (le) (ledgerline_webhooks_processing_duration_seconds_bucket{service_name=\"ledgerline-api\"}))",
+          "expr": "histogram_quantile(0.50, sum by (le) (ledgerline_webhooks_processing_duration_seconds_bucket{service_name=~\"$service\"}))",
           "legendFormat": "p50",
           "refId": "A"
         },
@@ -523,7 +523,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (ledgerline_webhooks_processing_duration_seconds_bucket{service_name=\"ledgerline-api\"}))",
+          "expr": "histogram_quantile(0.95, sum by (le) (ledgerline_webhooks_processing_duration_seconds_bucket{service_name=~\"$service\"}))",
           "legendFormat": "p95",
           "refId": "B"
         },
@@ -532,7 +532,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (ledgerline_webhooks_processing_duration_seconds_bucket{service_name=\"ledgerline-api\"}))",
+          "expr": "histogram_quantile(0.99, sum by (le) (ledgerline_webhooks_processing_duration_seconds_bucket{service_name=~\"$service\"}))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -587,7 +587,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(ledgerline_reconciliation_matched_total{service_name=\"ledgerline-api\"}[5m]))",
+          "expr": "sum(rate(ledgerline_reconciliation_matched_total{service_name=~\"$service\"}[5m]))",
           "legendFormat": "Matched",
           "refId": "A"
         },
@@ -596,7 +596,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(ledgerline_reconciliation_unmatched_total{service_name=\"ledgerline-api\"}[5m]))",
+          "expr": "sum(rate(ledgerline_reconciliation_unmatched_total{service_name=~\"$service\"}[5m]))",
           "legendFormat": "Unmatched / ambiguous",
           "refId": "B"
         },
@@ -605,7 +605,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(ledgerline_reconciliation_amount_mismatches_total{service_name=\"ledgerline-api\"}[5m]))",
+          "expr": "sum(rate(ledgerline_reconciliation_amount_mismatches_total{service_name=~\"$service\"}[5m]))",
           "legendFormat": "Amount mismatch",
           "refId": "C"
         }
@@ -660,7 +660,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.50, sum by (le) (ledgerline_reconciliation_processing_duration_seconds_bucket{service_name=\"ledgerline-api\"}))",
+          "expr": "histogram_quantile(0.50, sum by (le) (ledgerline_reconciliation_processing_duration_seconds_bucket{service_name=~\"$service\"}))",
           "legendFormat": "p50",
           "refId": "A"
         },
@@ -669,7 +669,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (ledgerline_reconciliation_processing_duration_seconds_bucket{service_name=\"ledgerline-api\"}))",
+          "expr": "histogram_quantile(0.95, sum by (le) (ledgerline_reconciliation_processing_duration_seconds_bucket{service_name=~\"$service\"}))",
           "legendFormat": "p95",
           "refId": "B"
         },
@@ -678,7 +678,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (ledgerline_reconciliation_processing_duration_seconds_bucket{service_name=\"ledgerline-api\"}))",
+          "expr": "histogram_quantile(0.99, sum by (le) (ledgerline_reconciliation_processing_duration_seconds_bucket{service_name=~\"$service\"}))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -733,7 +733,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (db_client_connection_state) (db_client_connection_count{service_name=\"ledgerline-api\"})",
+          "expr": "sum by (db_client_connection_state) (db_client_connection_count{service_name=~\"$service\"})",
           "legendFormat": "{{db_client_connection_state}}",
           "refId": "A"
         },
@@ -742,7 +742,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(db_client_connection_max{service_name=\"ledgerline-api\"})",
+          "expr": "max(db_client_connection_max{service_name=~\"$service\"})",
           "legendFormat": "max",
           "refId": "B"
         }
@@ -797,7 +797,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (db_client_operation_duration_seconds_bucket{service_name=\"ledgerline-api\"}))",
+          "expr": "histogram_quantile(0.95, sum by (le) (db_client_operation_duration_seconds_bucket{service_name=~\"$service\"}))",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -852,7 +852,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * sum(rate(dotnet_process_cpu_time_seconds_total{service_name=\"ledgerline-api\",cpu_mode=\"user\"}[5m]))",
+          "expr": "100 * sum(rate(dotnet_process_cpu_time_seconds_total{service_name=~\"$service\",cpu_mode=\"user\"}[5m]))",
           "legendFormat": "user",
           "refId": "A"
         },
@@ -861,7 +861,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * sum(rate(dotnet_process_cpu_time_seconds_total{service_name=\"ledgerline-api\",cpu_mode=\"system\"}[5m]))",
+          "expr": "100 * sum(rate(dotnet_process_cpu_time_seconds_total{service_name=~\"$service\",cpu_mode=\"system\"}[5m]))",
           "legendFormat": "system",
           "refId": "B"
         }
@@ -916,7 +916,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "dotnet_process_memory_working_set_bytes{service_name=\"ledgerline-api\"}",
+          "expr": "dotnet_process_memory_working_set_bytes{service_name=~\"$service\"}",
           "legendFormat": "working set",
           "refId": "A"
         }
@@ -1015,6 +1015,321 @@
         "graphMode": "area",
         "justifyMode": "auto"
       }
+    },
+    {
+      "type": "timeseries",
+      "title": "Load test \u00b7 requests",
+      "description": "Live k6 traffic from perf/run-fleet.sh (Prometheus remote-write).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(k6_http_reqs_total{test_type=\"fleet\"}[30s]))",
+          "legendFormat": "requests/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(k6_http_req_failed_rate{test_type=\"fleet\"}[30s]))",
+          "legendFormat": "failure rate",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Load test \u00b7 latency",
+      "description": "k6 client-observed latency percentiles under load.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(k6_http_req_duration_p95{test_type=\"fleet\"})",
+          "legendFormat": "p95",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(k6_http_req_duration_p99{test_type=\"fleet\"})",
+          "legendFormat": "p99",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(k6_http_req_duration_avg{test_type=\"fleet\"})",
+          "legendFormat": "avg",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Load test \u00b7 virtual users",
+      "description": "Active VUs \u2014 one VU per tenant.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 24,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(k6_vus{test_type=\"fleet\"})",
+          "legendFormat": "VUs",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Load test \u00b7 per-tenant latency p95",
+      "description": "p95 by tenant slug, to spot one tenant degrading while others stay healthy.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 74,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (tenant) (k6_http_req_duration_p95{test_type=\"fleet\"})",
+          "legendFormat": "{{tenant}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Load test \u00b7 workflow latency p95",
+      "description": "p95 by workflow: create_order, record_payment, webhooks, duplicate bursts, reconciliation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 82,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (workflow) (k6_http_req_duration_p95{test_type=\"fleet\"})",
+          "legendFormat": "{{workflow}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Load test \u00b7 idempotency and concurrency checks",
+      "description": "k6 check pass rate. Duplicate deliveries and racing settlements belong to these workflows.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 90,
+        "w": 24,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(k6_checks_rate{test_type=\"fleet\"})",
+          "legendFormat": "check pass rate",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "refresh": "10s",
@@ -1026,7 +1341,35 @@
     "opentelemetry"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "custom",
+        "query": "ledgerline-api,ledgerline-api-perf",
+        "current": {
+          "selected": true,
+          "text": "ledgerline-api",
+          "value": "ledgerline-api"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "ledgerline-api",
+            "value": "ledgerline-api"
+          },
+          {
+            "selected": false,
+            "text": "ledgerline-api-perf",
+            "value": "ledgerline-api-perf"
+          }
+        ],
+        "includeAll": false,
+        "multi": false,
+        "refresh": 0,
+        "hide": 0
+      }
+    ]
   },
   "time": {
     "from": "now-6h",
