@@ -7,10 +7,8 @@ public sealed class LoggingEmailSender(ILogger<LoggingEmailSender> logger) : IEm
 {
     public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
-        logger.LogInformation(
-            "Email queued to {Recipient} with subject {Subject}.",
-            message.To,
-            message.Subject);
+        // Avoid recipient logging
+        logger.LogInformation("Email queued with subject {Subject}.", message.Subject);
 
         return Task.CompletedTask;
     }

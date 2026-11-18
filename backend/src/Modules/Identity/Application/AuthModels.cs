@@ -2,17 +2,11 @@ namespace PaymentReconciliation.Modules.Identity.Application;
 
 public sealed record RegisterRequest(string Email, string Password, string DisplayName);
 
-public sealed record RegisterResponse(AuthUserDto User, string? VerificationToken);
-
 public sealed record ConfirmEmailRequest(string Email, string Token);
 
 public sealed record ResendConfirmationRequest(string Email);
 
-public sealed record ResendConfirmationResponse(string? VerificationToken);
-
-public sealed record RegisteredUser(AuthUserDto User, string? EmailVerificationToken);
-
-public sealed record LoginRequest(string Email, string Password, string? TenantSlug = null);
+public sealed record LoginRequest(string Email, string Password);
 
 public sealed record RefreshRequest(string RefreshToken);
 
@@ -43,7 +37,7 @@ public sealed record AuthResponse(
     AuthUserDto User,
     TenantLoginDto? Tenant = null);
 
-public sealed record ForgotPasswordResponse(string? ResetToken);
+public sealed record ForgotPasswordResponse();
 
 public sealed record UpdateProfileRequest(string DisplayName);
 
@@ -51,4 +45,4 @@ public sealed record ChangeEmailRequest(string NewEmail);
 
 public sealed record ConfirmEmailChangeRequest(string NewEmail, string Token);
 
-public sealed record ChangeEmailResponse(string? VerificationToken);
+public sealed record ChangeEmailResponse();

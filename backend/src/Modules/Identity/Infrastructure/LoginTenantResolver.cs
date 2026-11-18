@@ -13,12 +13,7 @@ public sealed class LoginTenantResolver(IHttpContextAccessor httpContextAccessor
             return null;
         }
 
-        var header = context.Request.Headers["X-Tenant-Slug"].ToString().Trim();
-        if (header.Length > 0)
-        {
-            return Normalize(header);
-        }
-
+        // Enforce subdomain login
         var host = context.Request.Host.Host;
         if (string.IsNullOrWhiteSpace(host))
         {
@@ -55,7 +50,15 @@ public sealed class LoginTenantResolver(IHttpContextAccessor httpContextAccessor
             return null;
         }
 
-        if (!slug.All(character => char.IsLetterOrDigit(character) || character == '-'))
+        if (slug is "admin" or "api" or "app" or "mail" or "platform" or "support" or "www")
+        {
+            return null;
+        }
+
+        if (!slug.All(character =>
+                (character >= 'a' && character <= 'z')
+                || (character >= '0' && character <= '9')
+                || character == '-'))
         {
             return null;
         }

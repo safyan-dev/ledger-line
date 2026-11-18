@@ -4,7 +4,6 @@ using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using PaymentReconciliation.Modules.Identity.Contracts;
 using PaymentReconciliation.Modules.Identity.Domain;
@@ -23,28 +22,23 @@ public sealed class AuthService(
     ICurrentUser currentUser,
     IEmailSender emailSender,
     IConfiguration configuration,
-    IHostEnvironment environment,
     ITenantMembershipVerifier tenantMembershipVerifier,
     ILoginTenantResolver loginTenantResolver)
 {
     private readonly JwtOptions _jwtOptions = jwtOptions.Value;
 
-    public async Task<Result<RegisterResponse>> RegisterAsync(
+    public async Task<Result<AuthUserDto>> RegisterAsync(
         RegisterRequest request,
         CancellationToken cancellationToken = default)
     {
-        var user = await RegisterUserAsync(request.Email, request.Password, request.DisplayName, cancellationToken);
-        if (user.IsFailure)
-        {
-            return Result.Failure<RegisterResponse>(user.Error!);
-        }
-
-        return Result.Success(new RegisterResponse(
-            user.Value.User,
-            user.Value.EmailVerificationToken));
+        return await RegisterUserAsync(
+            request.Email,
+            request.Password,
+            request.DisplayName,
+            cancellationToken);
     }
 
-    public async Task<Result<RegisteredUser>> RegisterUserAsync(
+    public async Task<Result<AuthUserDto>> RegisterUserAsync(
         string email,
         string password,
         string displayName,
@@ -53,7 +47,7 @@ public sealed class AuthService(
     {
         if (!TryNormalizeEmail(email, out var normalizedEmail))
         {
-            return Result.Failure<RegisteredUser>(Error.Validation(
+            return Result.Failure<AuthUserDto>(Error.Validation(
                 "auth.invalid_email",
                 "A valid email address is required."));
         }
@@ -61,14 +55,14 @@ public sealed class AuthService(
         var normalizedDisplayName = displayName?.Trim() ?? string.Empty;
         if (normalizedDisplayName.Length == 0 || normalizedDisplayName.Length > 160)
         {
-            return Result.Failure<RegisteredUser>(Error.Validation(
+            return Result.Failure<AuthUserDto>(Error.Validation(
                 "auth.invalid_display_name",
                 "Display name must be between 1 and 160 characters."));
         }
 
         if (await userManager.FindByEmailAsync(normalizedEmail) is not null)
         {
-            return Result.Failure<RegisteredUser>(Error.Conflict(
+            return Result.Failure<AuthUserDto>(Error.Conflict(
                 "auth.email_taken",
                 "An account with this email already exists."));
         }
@@ -87,16 +81,17 @@ public sealed class AuthService(
         var createResult = await userManager.CreateAsync(user, password);
         if (!createResult.Succeeded)
         {
-            return Result.Failure<RegisteredUser>(IdentityValidationError(
+            return Result.Failure<AuthUserDto>(IdentityValidationError(
                 createResult,
                 "The account could not be created."));
         }
 
-        var verificationToken = emailConfirmed
-            ? null
-            : await SendEmailConfirmationAsync(user, cancellationToken);
+        if (!emailConfirmed)
+        {
+            await SendEmailConfirmationAsync(user, cancellationToken);
+        }
 
-        return Result.Success(new RegisteredUser(ToDto(user), verificationToken));
+        return Result.Success(ToDto(user));
     }
 
     public async Task<Result<AuthUserDto>> VerifyCredentialsAsync(
@@ -183,23 +178,23 @@ public sealed class AuthService(
         return Result.Success(ToDto(user));
     }
 
-    public async Task<Result<ResendConfirmationResponse>> ResendConfirmationAsync(
+    public async Task<Result> ResendConfirmationAsync(
         string email,
         CancellationToken cancellationToken = default)
     {
         if (!TryNormalizeEmail(email, out var normalizedEmail))
         {
-            return Result.Success(new ResendConfirmationResponse(null));
+            return Result.Success();
         }
 
         var user = await userManager.FindByEmailAsync(normalizedEmail);
         if (user is null || user.Status != UserStatus.Active || user.EmailConfirmed)
         {
-            return Result.Success(new ResendConfirmationResponse(null));
+            return Result.Success();
         }
 
-        var token = await SendEmailConfirmationAsync(user, cancellationToken);
-        return Result.Success(new ResendConfirmationResponse(token));
+        await SendEmailConfirmationAsync(user, cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result<AuthResponse>> LoginAsync(
@@ -212,8 +207,7 @@ public sealed class AuthService(
             return Result.Failure<AuthResponse>(user.Error!);
         }
 
-        var tenantSlug = NormalizeTenantSlug(request.TenantSlug)
-                         ?? loginTenantResolver.ResolveTenantSlug();
+        var tenantSlug = loginTenantResolver.ResolveTenantSlug();
         TenantLoginDto? tenant = null;
 
         if (tenantSlug is not null)
@@ -477,8 +471,7 @@ public sealed class AuthService(
                 $"Use this token to confirm your new email address: {token}"),
             cancellationToken);
 
-        return Result.Success(new ChangeEmailResponse(
-            environment.IsDevelopment() ? token : null));
+        return Result.Success(new ChangeEmailResponse());
     }
 
     public async Task<Result<AuthUserDto>> ConfirmEmailChangeAsync(
@@ -605,47 +598,27 @@ public sealed class AuthService(
         }
     }
 
-    private async Task<string?> SendEmailConfirmationAsync(
+    private async Task SendEmailConfirmationAsync(
         ApplicationUser user,
         CancellationToken cancellationToken)
     {
         var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
         var baseUrl = configuration["Web:PublicBaseUrl"]?.TrimEnd('/');
         var email = user.Email ?? string.Empty;
-        var body = baseUrl is null
+        var link = baseUrl is null
+            ? null
+            : $"{baseUrl}/confirm-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
+        var body = link is null
             ? $"Confirm your email address with this token: {token}"
-            : $"Confirm your email address: {baseUrl}/confirm-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
+            : $"Confirm your email address: {link}\n\nToken: {token}";
 
         await emailSender.SendAsync(
             new EmailMessage(email, "Confirm your email address", body),
             cancellationToken);
-
-        return environment.IsDevelopment() ? token : null;
     }
 
     private static AuthUserDto ToDto(ApplicationUser user)
         => new(user.Id, user.Email ?? string.Empty, user.DisplayName, user.IsPlatformAdmin, user.EmailConfirmed);
-
-    private static string? NormalizeTenantSlug(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        var slug = value.Trim().ToLowerInvariant();
-        if (slug.Length is < 2 or > 40)
-        {
-            return null;
-        }
-
-        if (!slug.All(character => char.IsLetterOrDigit(character) || character == '-'))
-        {
-            return null;
-        }
-
-        return char.IsLetterOrDigit(slug[0]) && char.IsLetterOrDigit(slug[^1]) ? slug : null;
-    }
 
     private static bool TryNormalizeEmail(string? value, out string email)
     {

@@ -37,7 +37,15 @@ public static class IdentityModule
         services.AddScoped<IIdentityFacade, IdentityFacade>();
         services.AddScoped<ICurrentUser, JwtCurrentUser>();
         services.AddScoped<IActorContext, ActorContext>();
-        services.AddScoped<IEmailSender, LoggingEmailSender>();
+
+        if (configuration.GetValue("Email:WriteToOutbox", false))
+        {
+            services.AddScoped<IEmailSender, FileEmailSender>();
+        }
+        else
+        {
+            services.AddScoped<IEmailSender, LoggingEmailSender>();
+        }
 
         return services;
     }

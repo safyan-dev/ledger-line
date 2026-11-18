@@ -11,7 +11,7 @@ public sealed class IdentityFacade(
     AuthService authService,
     UserManager<ApplicationUser> userManager) : IIdentityFacade
 {
-    public async Task<Result<CreatedIdentityUser>> CreateUserAsync(
+    public async Task<Result<IdentityUser>> CreateUserAsync(
         string email,
         string password,
         string displayName,
@@ -25,10 +25,8 @@ public sealed class IdentityFacade(
             cancellationToken,
             emailConfirmed);
         return result.IsFailure
-            ? Result.Failure<CreatedIdentityUser>(result.Error!)
-            : Result.Success(new CreatedIdentityUser(
-                ToContract(result.Value.User),
-                result.Value.EmailVerificationToken));
+            ? Result.Failure<IdentityUser>(result.Error!)
+            : Result.Success(ToContract(result.Value));
     }
 
     public async Task<Result<IdentityUser>> VerifyCredentialsAsync(

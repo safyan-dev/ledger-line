@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PaymentReconciliation.Modules.Identity.Domain;
 using PaymentReconciliation.SharedKernel.Abstractions;
@@ -11,7 +10,6 @@ public sealed class PasswordResetService(
     UserManager<ApplicationUser> userManager,
     AuthService authService,
     IEmailSender emailSender,
-    IHostEnvironment environment,
     ILogger<PasswordResetService> logger)
 {
     public async Task<Result<ForgotPasswordResponse>> ForgotAsync(
@@ -21,7 +19,7 @@ public sealed class PasswordResetService(
         var user = await userManager.FindByEmailAsync(email.Trim());
         if (user is null || user.Status != UserStatus.Active)
         {
-            return Result.Success(new ForgotPasswordResponse(null));
+            return Result.Success(new ForgotPasswordResponse());
         }
 
         var token = await userManager.GeneratePasswordResetTokenAsync(user);
@@ -34,7 +32,7 @@ public sealed class PasswordResetService(
                 $"Use this token to reset your password: {token}"),
             cancellationToken);
 
-        return Result.Success(new ForgotPasswordResponse(environment.IsDevelopment() ? token : null));
+        return Result.Success(new ForgotPasswordResponse());
     }
 
     public async Task<Result> ResetAsync(

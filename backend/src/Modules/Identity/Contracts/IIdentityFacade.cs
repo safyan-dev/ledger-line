@@ -16,13 +16,9 @@ public sealed record IssuedSession(
     DateTimeOffset RefreshTokenExpiresAt,
     IdentityUser User);
 
-public sealed record CreatedIdentityUser(
-    IdentityUser User,
-    string? EmailVerificationToken);
-
 public interface IIdentityFacade
 {
-    Task<Result<CreatedIdentityUser>> CreateUserAsync(
+    Task<Result<IdentityUser>> CreateUserAsync(
         string email,
         string password,
         string displayName,

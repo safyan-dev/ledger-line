@@ -25,7 +25,7 @@ public static class AuthEndpoints
         .AllowAnonymous()
         .RequireRateLimiting("auth")
         .WithName("RegisterUser")
-        .Produces<RegisterResponse>()
+        .Produces<AuthUserDto>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status409Conflict);
 
@@ -54,7 +54,7 @@ public static class AuthEndpoints
         .AllowAnonymous()
         .RequireRateLimiting("auth")
         .WithName("ResendEmailConfirmation")
-        .Produces<ResendConfirmationResponse>();
+        .Produces(StatusCodes.Status204NoContent);
 
         group.MapPost("/login", async (
             LoginRequest request,
