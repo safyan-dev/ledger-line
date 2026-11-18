@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HostFiltering;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -67,6 +68,13 @@ builder.Services.AddReportingModule();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
 
+builder.Services.Configure<HostFilteringOptions>(options =>
+{
+    options.AllowedHosts = (builder.Configuration["AllowedHosts"] ?? "localhost")
+        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    options.AllowEmptyHosts = false;
+});
+
 builder.Services.AddCors(options => options.AddPolicy("web", policy => policy
     .WithOrigins("http://localhost:5173")
     .AllowAnyHeader()
@@ -75,6 +83,26 @@ builder.Services.AddCors(options => options.AddPolicy("web", policy => policy
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    {
+        var permitLimit = Math.Max(1, builder.Configuration.GetValue("RateLimiting:GlobalPermitLimit", 300));
+        var windowSeconds = Math.Max(1, builder.Configuration.GetValue("RateLimiting:GlobalWindowSeconds", 60));
+        var partitionKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey,
+            _ => new TokenBucketRateLimiterOptions
+            {
+                TokenLimit = permitLimit,
+                TokensPerPeriod = 1,
+                ReplenishmentPeriod = TimeSpan.FromSeconds(
+                    Math.Max(0.001, windowSeconds / (double)permitLimit)),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
     options.AddPolicy("auth", httpContext =>
     {
         var permitLimit = Math.Max(1, builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10));
@@ -94,12 +122,46 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             });
     });
+
+    options.AddPolicy("registration", httpContext =>
+    {
+        var permitLimit = Math.Max(1, builder.Configuration.GetValue("RateLimiting:RegistrationPermitLimit", 5));
+        var windowSeconds = Math.Max(1, builder.Configuration.GetValue("RateLimiting:RegistrationWindowSeconds", 3600));
+        var partitionKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey,
+            _ => new TokenBucketRateLimiterOptions
+            {
+                TokenLimit = permitLimit,
+                TokensPerPeriod = 1,
+                ReplenishmentPeriod = TimeSpan.FromSeconds(
+                    Math.Max(0.001, windowSeconds / (double)permitLimit)),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
 });
 
 var app = builder.Build();
 var seedDemoData = app.Configuration.GetValue("Database:SeedDemoData", false);
 
+// Enforce allowed hosts
+app.UseHostFiltering();
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<SecurityHeadersMiddleware>();
+app.Use(async (context, next) =>
+{
+    // Bound query strings
+    if (context.Request.QueryString.Value?.Length > 2048)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsJsonAsync(new { code = "request.query_too_long" });
+        return;
+    }
+
+    await next(context);
+});
 app.UseExceptionHandler();
 app.UseCors("web");
 app.UseRateLimiter();
@@ -119,6 +181,7 @@ app.MapWebhookEndpoints();
 app.MapReconciliationEndpoints();
 app.MapAuditEndpoints();
 app.MapDashboardEndpoints();
+app.MapReportEndpoints();
 app.MapAuthEndpoints();
 app.MapAccountEndpoints();
 app.MapTenantEndpoints();
