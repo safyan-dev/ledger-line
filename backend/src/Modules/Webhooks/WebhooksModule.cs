@@ -14,16 +14,6 @@ public static class WebhooksModule
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var hasSigningSecret = !string.IsNullOrWhiteSpace(configuration["Webhooks:SigningSecret"])
-                               || configuration.GetSection("Webhooks:Providers")
-                                   .GetChildren()
-                                   .Any(provider => !string.IsNullOrWhiteSpace(provider["SigningSecret"]));
-        if (!hasSigningSecret)
-        {
-            throw new InvalidOperationException(
-                "No webhook signing secret is configured. Run backend/tools/setup-dev-secrets.sh (or .ps1) or set Webhooks__SigningSecret.");
-        }
-
         services.AddCqrsHandlers(typeof(WebhookEvent).Assembly);
         services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
         services.AddScoped<IWebhookSignatureVerifier, HmacWebhookSignatureVerifier>();
@@ -31,9 +21,9 @@ public static class WebhooksModule
         services.AddScoped<IWebhookReporting, WebhookReporting>();
 
         services.Configure<WebhookIngestionOptions>(configuration.GetSection("Webhooks:Ingestion"));
-        services.AddSingleton<IWebhookIngressQueue, WebhookIngressQueue>();
         services.AddScoped<IWebhookEventClaimStore, WebhookEventClaimStore>();
-        services.AddHostedService<WebhookIngressWorker>();
+        services.AddScoped<IWebhookOutbox, WebhookOutbox>();
+        services.AddHostedService<WebhookOutboxWorker>();
         services.AddHostedService<WebhookRecoveryWorker>();
 
         return services;

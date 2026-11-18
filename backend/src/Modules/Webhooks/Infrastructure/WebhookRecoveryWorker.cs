@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using PaymentReconciliation.Modules.Webhooks.Application;
 using PaymentReconciliation.Modules.Webhooks.Domain;
 using PaymentReconciliation.Persistence.Abstractions;
+using PaymentReconciliation.SharedKernel.Abstractions;
 
 namespace PaymentReconciliation.Modules.Webhooks.Infrastructure;
 
@@ -36,34 +37,59 @@ public sealed class WebhookRecoveryWorker(
     {
         try
         {
-            using var scope = scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
-            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            List<(Guid Id, Guid TenantId)> stuck;
 
-            var cutoff = DateTimeOffset.UtcNow.AddMinutes(-Math.Max(1, options.Value.StuckMinutes));
-
-            var stuckEvents = await dbContext.Set<WebhookEvent>()
-                .Where(webhookEvent =>
-                    (webhookEvent.Status == WebhookStatus.Received || webhookEvent.Status == WebhookStatus.Processing)
-                    && webhookEvent.ReceivedAt < cutoff)
-                .ToListAsync(cancellationToken);
-
-            if (stuckEvents.Count == 0)
+            using (var lookupScope = scopeFactory.CreateScope())
             {
-                return;
+                var dbContext = lookupScope.ServiceProvider.GetRequiredService<IAppDbContext>();
+                var cutoff = DateTimeOffset.UtcNow.AddMinutes(-Math.Max(1, options.Value.StuckMinutes));
+                var rows = await dbContext.Set<WebhookEvent>()
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Where(webhookEvent =>
+                        (webhookEvent.Status == WebhookStatus.Received
+                         || webhookEvent.Status == WebhookStatus.Processing)
+                        && webhookEvent.ReceivedAt < cutoff)
+                    .Select(webhookEvent => new { webhookEvent.Id, webhookEvent.TenantId })
+                    .ToListAsync(cancellationToken);
+
+                stuck = rows
+                    .Select(item => (item.Id, item.TenantId))
+                    .ToList();
             }
 
-            foreach (var webhookEvent in stuckEvents)
+            foreach (var (id, tenantId) in stuck)
             {
-                webhookEvent.MarkFailed("processing_interrupted");
+                using var scope = scopeFactory.CreateScope();
+                scope.ServiceProvider.GetRequiredService<ITenantContext>()
+                    .Set(new TenantContextSnapshot(tenantId, string.Empty, null, null, false));
+                var dbContext = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
+                var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                var webhookEvent = await dbContext.Set<WebhookEvent>()
+                    .FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+
+                if (webhookEvent is null)
+                {
+                    continue;
+                }
+
+                if (webhookEvent.AttemptCount >= Math.Max(1, options.Value.MaxAttempts))
+                {
+                    webhookEvent.MarkFailed("processing_interrupted");
+                    await unitOfWork.DispatchDomainEventsAsync(cancellationToken);
+                }
+                else
+                {
+                    webhookEvent.ScheduleRetry("processing_interrupted", DateTimeOffset.UtcNow);
+                }
+
+                await unitOfWork.SaveChangesAsync(cancellationToken);
             }
 
-            await unitOfWork.DispatchDomainEventsAsync(cancellationToken);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-
-            logger.LogWarning(
-                "Marked {Count} interrupted webhook event(s) as failed.",
-                stuckEvents.Count);
+            if (stuck.Count > 0)
+            {
+                logger.LogWarning("Recovered {Count} interrupted webhook event(s).", stuck.Count);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

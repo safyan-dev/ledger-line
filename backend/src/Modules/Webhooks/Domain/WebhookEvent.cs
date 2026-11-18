@@ -39,6 +39,7 @@ public sealed class WebhookEvent : AggregateRoot, ITenantOwned
         Signature = signature;
         PayloadHash = payloadHash;
         ReceivedAt = receivedAt;
+        NextAttemptAt = receivedAt;
         Status = WebhookStatus.Received;
         AttemptCount = 1;
     }
@@ -72,6 +73,8 @@ public sealed class WebhookEvent : AggregateRoot, ITenantOwned
     public string? LastConflictReason { get; private set; }
 
     public DateTimeOffset ReceivedAt { get; private set; }
+
+    public DateTimeOffset? NextAttemptAt { get; private set; }
 
     public DateTimeOffset? ProcessedAt { get; private set; }
 
@@ -118,13 +121,17 @@ public sealed class WebhookEvent : AggregateRoot, ITenantOwned
     }
 
     public void MarkProcessing()
-        => Status = WebhookStatus.Processing;
+    {
+        Status = WebhookStatus.Processing;
+        NextAttemptAt = null;
+    }
 
     public void MarkProcessed(Guid paymentId, DateTimeOffset? processedAt = null)
     {
         Status = WebhookStatus.Processed;
         PaymentId = paymentId;
         ProcessedAt = processedAt ?? DateTimeOffset.UtcNow;
+        NextAttemptAt = null;
         FailureReason = null;
         Raise(new WebhookEventProcessed(Id, Provider, ProviderEventId, paymentId));
     }
@@ -134,8 +141,18 @@ public sealed class WebhookEvent : AggregateRoot, ITenantOwned
         Status = WebhookStatus.Failed;
         FailureReason = reason;
         ProcessedAt = processedAt ?? DateTimeOffset.UtcNow;
+        NextAttemptAt = null;
         AttemptCount++;
         Raise(new WebhookEventFailed(Id, Provider, ProviderEventId, reason));
+    }
+
+    public void ScheduleRetry(string reason, DateTimeOffset nextAttemptAt)
+    {
+        Status = WebhookStatus.Received;
+        FailureReason = reason;
+        ProcessedAt = null;
+        NextAttemptAt = nextAttemptAt;
+        AttemptCount++;
     }
 
     public void MarkIgnored(string reason, DateTimeOffset? processedAt = null)
@@ -161,6 +178,7 @@ public sealed class WebhookEvent : AggregateRoot, ITenantOwned
         Status = WebhookStatus.Received;
         FailureReason = null;
         ProcessedAt = null;
+        NextAttemptAt = DateTimeOffset.UtcNow;
     }
 
     public void RegisterDuplicate()

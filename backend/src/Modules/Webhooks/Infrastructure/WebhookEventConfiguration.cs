@@ -24,6 +24,7 @@ public sealed class WebhookEventConfiguration : IEntityTypeConfiguration<Webhook
             .IsUnique();
 
         builder.HasIndex(webhookEvent => webhookEvent.Status);
+        builder.HasIndex(webhookEvent => new { webhookEvent.Status, webhookEvent.NextAttemptAt });
         builder.HasIndex(webhookEvent => webhookEvent.ReceivedAt);
 
         builder.Property(webhookEvent => webhookEvent.EventType)

@@ -2,15 +2,19 @@ namespace PaymentReconciliation.Modules.Webhooks.Application;
 
 public sealed class WebhookIngestionOptions
 {
-    public int QueueCapacity { get; set; } = 10_000;
-
-    public int WorkerCount { get; set; } = 4;
-
     public double AckBudgetMs { get; set; } = 5;
 
     public long MaxPayloadBytes { get; set; } = 1_048_576;
 
     public int StuckMinutes { get; set; } = 5;
+
+    public int OutboxBatchSize { get; set; } = 20;
+
+    public int OutboxPollMilliseconds { get; set; } = 500;
+
+    public int MaxAttempts { get; set; } = 5;
+
+    public int RetryBaseSeconds { get; set; } = 5;
 
     public bool AllowSimulationHeaders { get; set; }
 }

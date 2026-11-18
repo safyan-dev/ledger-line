@@ -1,14 +1,20 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Configuration;
 using PaymentReconciliation.Modules.Webhooks.Application;
+using PaymentReconciliation.SharedKernel.Abstractions;
 using PaymentReconciliation.SharedKernel.Results;
 
 namespace PaymentReconciliation.Modules.Webhooks.Infrastructure;
 
-public sealed class HmacWebhookSignatureVerifier(IConfiguration configuration) : IWebhookSignatureVerifier
+public sealed class HmacWebhookSignatureVerifier(
+    IWebhookSecretStore secretStore,
+    ITenantContext tenantContext) : IWebhookSignatureVerifier
 {
-    public Result Verify(string provider, string rawBody, string? signatureHeader)
+    public async Task<Result> VerifyAsync(
+        string provider,
+        string rawBody,
+        string? signatureHeader,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(signatureHeader))
         {
@@ -17,9 +23,14 @@ public sealed class HmacWebhookSignatureVerifier(IConfiguration configuration) :
                 "Missing X-Provider-Signature header."));
         }
 
-        var secret = configuration[$"Webhooks:Providers:{provider}:SigningSecret"]
-                     ?? configuration["Webhooks:SigningSecret"];
+        if (tenantContext.TenantId is not { } tenantId)
+        {
+            return Result.Failure(Error.Unauthorized(
+                "webhook.tenant_required",
+                "A tenant is required to verify webhook signatures."));
+        }
 
+        var secret = await secretStore.GetSecretAsync(tenantId, provider, cancellationToken);
         if (string.IsNullOrWhiteSpace(secret))
         {
             return Result.Failure(Error.Unexpected(

@@ -26,7 +26,7 @@ public static class WebhookEndpoints
             string provider,
             HttpRequest request,
             IWebhookSignatureVerifier signatureVerifier,
-            IWebhookIngressQueue ingressQueue,
+            IWebhookEventClaimStore claimStore,
             ITenantContext tenantContext,
             IOptions<WebhookIngestionOptions> options,
             ILoggerFactory loggerFactory) =>
@@ -74,10 +74,11 @@ public static class WebhookEndpoints
 
             var normalizedProvider = provider.Trim().ToLowerInvariant();
             var signature = request.Headers["X-Provider-Signature"].ToString();
-            var signatureResult = signatureVerifier.Verify(
+            var signatureResult = await signatureVerifier.VerifyAsync(
                 normalizedProvider,
                 rawBody,
-                string.IsNullOrWhiteSpace(signature) ? null : signature);
+                string.IsNullOrWhiteSpace(signature) ? null : signature,
+                cancellationToken);
 
             if (signatureResult.IsFailure)
             {
@@ -98,16 +99,14 @@ public static class WebhookEndpoints
                 SimulateFailure: IsSimulationRequested(request, options.Value),
                 CorrelationId: request.HttpContext.TraceIdentifier);
 
-            if (!ingressQueue.TryEnqueue(envelope))
+            // Persist before ack
+            var claim = await claimStore.ClaimAsync(envelope, cancellationToken);
+            if (claim.Kind != WebhookClaimKind.Claimed)
             {
-                logger.LogWarning("Webhook ingress queue is full; rejecting {Provider}.", normalizedProvider);
-
-                request.HttpContext.Response.Headers.RetryAfter = "1";
-                return Results.Problem(
-                    title: "Webhook ingress is busy",
-                    detail: "The webhook queue is full. Retry with the same event id.",
-                    statusCode: StatusCodes.Status503ServiceUnavailable,
-                    extensions: new Dictionary<string, object?> { ["code"] = "webhook.queue_full" });
+                return Results.Accepted(value: new WebhookAck(
+                    normalizedProvider,
+                    envelope.ReceivedAt,
+                    Accepted: true));
             }
 
             var elapsedMs = Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;

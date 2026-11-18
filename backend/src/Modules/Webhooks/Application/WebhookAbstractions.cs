@@ -16,7 +16,11 @@ public interface IWebhookPayloadParser
 
 public interface IWebhookSignatureVerifier
 {
-    Result Verify(string provider, string rawBody, string? signatureHeader);
+    Task<Result> VerifyAsync(
+        string provider,
+        string rawBody,
+        string? signatureHeader,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IWebhookEventRepository
