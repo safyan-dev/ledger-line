@@ -16,6 +16,7 @@ dist-ssr/
 .env.*
 !.env.example
 appsettings.*.local.json
+email-outbox/
 
 ## OS
 .DS_Store
@@ -28,5 +29,7 @@ commandcode/
 .commandcode/
 artifacts/
 scripts/
+
 ## Perf fleet credentials (tenant logins and tokens)
 perf/results/*-fleet.json
+perf/results/*-fleet-*
