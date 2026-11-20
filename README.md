@@ -74,6 +74,12 @@ Operational Modules:
 - **Reporting** — Operational dashboard data.
 - **Support** — Tenant-scoped support tickets.
 
+## Module Architecture
+
+Each module follows the below structure:
+
+<img width="729" height="648" alt="image" src="https://github.com/user-attachments/assets/9e825a70-1d4a-4ba2-873e-2ede4378a174" />
+
 The application uses a custom CQRS dispatcher, a Result pattern for application errors, and domain events for communication between modules.
 
 PostgreSQL transactions, row-level locks, unique constraints, and tenant-aware relationships help protect data consistency and prevent duplicate payment allocations.
@@ -111,7 +117,7 @@ This starts PostgreSQL, pgAdmin, and the observability services.
 
 ### 2. Configure local secrets
 
-Local secrets are stored with .NET user-secrets and are never committed. Run the setup script for your shell:
+Local secrets are stored with .NET user secrets and are never committed. Run the setup script for your shell:
 
 ```bash
 ./backend/tools/setup-dev-secrets.sh
