@@ -71,9 +71,15 @@ public sealed class WebhookOutboxTests(LedgerlineAppFactory factory)
             Assert.Equal(WebhookStatus.Received, stored.Status);
             Assert.Equal("transient_failure", stored.FailureReason);
             Assert.Equal(2, stored.AttemptCount);
-            Assert.Equal(claimAt.AddSeconds(5), stored.NextAttemptAt);
+            Assert.Equal(ToDatabasePrecision(claimAt.AddSeconds(5)), stored.NextAttemptAt);
         }
     }
+
+    // PostgreSQL timestamptz stores microseconds; a .NET tick is 100 ns, so a
+    // sub-microsecond remainder is truncated on round-trip. Compare at the
+    // precision the column actually keeps.
+    private static DateTimeOffset ToDatabasePrecision(DateTimeOffset value)
+        => new(value.Ticks - (value.Ticks % 10), value.Offset);
 
     private static string NewSlug(string prefix)
         => $"{prefix}-{Guid.NewGuid().ToString("N")[..10]}";
