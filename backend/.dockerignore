@@ -1,0 +1,12 @@
+# Build context for backend/Dockerfile (context = backend/)
+**/bin/
+**/obj/
+**/TestResults/
+**/*.user
+**/*.suo
+.vs/
+.vscode/
+**/appsettings.*.local.json
+**/email-outbox/
+Dockerfile
+.dockerignore
