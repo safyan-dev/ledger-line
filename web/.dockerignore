@@ -1,0 +1,10 @@
+# Build context for web/Dockerfile (context = web/)
+node_modules/
+dist/
+dist-ssr/
+.git/
+.vscode/
+.idea/
+*.log
+Dockerfile
+.dockerignore
