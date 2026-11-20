@@ -1,0 +1,158 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Existing commit SHA image tag to deploy (leave empty for the current SHA)
+        required: false
+        type: string
+      run_migrations:
+        description: Run EF Core migrations before rollout
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+jobs:
+  backend:
+    name: Backend CI
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/backend-ci.yml
+
+  frontend:
+    name: Frontend CI
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/frontend-ci.yml
+
+  images:
+    name: Build and publish images
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      push: true
+
+  deploy:
+    name: Deploy to production
+    needs: [backend, frontend, images]
+    if: |
+      always() && (
+        github.event_name == 'workflow_dispatch' ||
+        (needs.backend.result == 'success' &&
+         needs.frontend.result == 'success' &&
+         needs.images.result == 'success')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.WEB_BASE_URL }}
+
+    steps:
+      - name: Resolve image coordinates
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          tag="${{ inputs.image_tag }}"
+          if [ -z "$tag" ]; then
+            tag="${GITHUB_SHA}"
+          fi
+          {
+            echo "REGISTRY=ghcr.io/${owner}"
+            echo "IMAGE_TAG=${tag}"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "### Deployment"
+            echo ""
+            echo "Images: \`ghcr.io/${owner}/ledgerline-{api,web,migrate}:${tag}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check deployment configuration
+        id: guard
+        run: |
+          if [ "${{ vars.DEPLOY_ENABLED }}" = "true" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Deployment not configured::DEPLOY_ENABLED is not 'true'. Images are published, but migration, rollout and health checks are skipped."
+            echo "⚠️ Deployment is not configured (\`DEPLOY_ENABLED\` is not \`true\`). Images were published to GHCR." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Log in to GHCR
+        if: steps.guard.outputs.skip != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run database migrations
+        if: steps.guard.outputs.skip != 'true' && (github.event_name != 'workflow_dispatch' || inputs.run_migrations)
+        env:
+          CONNECTION_STRING: ${{ secrets.PRODUCTION_CONNECTION_STRING }}
+        run: |
+          if [ -z "${CONNECTION_STRING}" ]; then
+            echo "::error title=Missing secret::PRODUCTION_CONNECTION_STRING is not set on the production environment."
+            exit 1
+          fi
+
+          # Keep the connection string out of the process list and logs.
+          env_file="$RUNNER_TEMP/migrate.env"
+          umask 077
+          printf 'ConnectionStrings__Database=%s\nASPNETCORE_ENVIRONMENT=Production\n' "$CONNECTION_STRING" > "$env_file"
+
+          docker run --rm --env-file "$env_file" "${REGISTRY}/ledgerline-migrate:${IMAGE_TAG}"
+
+          rm -f "$env_file"
+          echo "Migrations applied once with ${REGISTRY}/ledgerline-migrate:${IMAGE_TAG}." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy application images
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          echo "::error title=No deployment target configured::Images ${REGISTRY}/ledgerline-api:${IMAGE_TAG} and ${REGISTRY}/ledgerline-web:${IMAGE_TAG} are published, but no hosting provider is configured. Add the provider rollout step here."
+          exit 1
+
+      - name: Verify API health
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          if [ -z "${API_BASE_URL}" ]; then
+            echo "::error title=Missing variable::API_BASE_URL is not set on the production environment."
+            exit 1
+          fi
+
+          for attempt in $(seq 1 20); do
+            body=$(curl -fsS --max-time 10 "${API_BASE_URL%/}/health/ready" || true)
+            status=$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)
+            if [ "$status" = "Healthy" ]; then
+              echo "API reports Healthy."
+              echo "✅ API health check passed." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Attempt ${attempt}: status '${status:-unreachable}', retrying."
+            sleep 6
+          done
+
+          echo "::error title=Health check failed::${API_BASE_URL%/}/health/ready did not report Healthy."
+          exit 1
+
+      - name: Verify web health
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          WEB_BASE_URL: ${{ vars.WEB_BASE_URL }}
+        run: |
+          if [ -z "${WEB_BASE_URL}" ]; then
+            echo "::warning title=Missing variable::WEB_BASE_URL is not set; skipping the web health check."
+            exit 0
+          fi
+          curl -fsS --retry 5 --retry-delay 5 "${WEB_BASE_URL%/}/healthz" > /dev/null
+          echo "✅ Web health check passed." >> "$GITHUB_STEP_SUMMARY"
