@@ -1,0 +1,91 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: |
+            backend/Directory.Packages.props
+            backend/**/*.csproj
+
+      - name: Verify Docker is available (Testcontainers)
+        run: docker info > /dev/null
+
+      - name: Restore
+        run: dotnet restore backend/PaymentReconciliation.slnx
+
+      - name: Build (Release)
+        run: dotnet build backend/PaymentReconciliation.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: >
+          dotnet test backend/PaymentReconciliation.slnx
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory backend/TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/TestResults/*.trx
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Summarize test results
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, sys
+          import xml.etree.ElementTree as ET
+
+          ns = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          total = passed = failed = skipped = 0
+
+          for path in glob.glob("backend/TestResults/*.trx"):
+              root = ET.parse(path).getroot()
+              for counter in root.iterfind(".//t:ResultSummary/t:Counters", ns):
+                  total += int(counter.get("total", 0))
+                  passed += int(counter.get("passed", 0))
+                  failed += int(counter.get("failed", 0))
+                  skipped += int(counter.get("notExecuted", 0))
+
+          summary = f"Backend tests: {passed} passed, {failed} failed, {skipped} skipped ({total} total)"
+          print(summary)
+          with open("$GITHUB_STEP_SUMMARY", "a", encoding="utf-8") as summary_file:
+              summary_file.write(f"### {summary}\n")
+
+          if total == 0:
+              print("::error::No test results were produced.")
+              sys.exit(1)
+          if failed:
+              print("::error::One or more backend tests failed.")
+              sys.exit(1)
+          PY
