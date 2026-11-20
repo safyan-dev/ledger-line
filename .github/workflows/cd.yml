@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: Existing commit SHA image tag to deploy (leave empty for the current SHA)
+        description: Commit SHA image tag to deploy. Empty means the SHA of the ref that triggered the run.
         required: false
         type: string
       run_migrations:

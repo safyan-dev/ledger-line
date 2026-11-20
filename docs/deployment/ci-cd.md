@@ -110,7 +110,7 @@ the GitHub Actions cache (`type=gha`), scoped per image.
 
 | Input | Meaning |
 |---|---|
-| `image_tag` | Commit SHA of an existing image set. Leave empty for the current `HEAD`. |
+| `image_tag` | Commit SHA of an existing image set to deploy. Leave empty to deploy the SHA of the ref the run was started from. |
 | `run_migrations` | Run EF Core migrations before rollout (default on). |
 
 A manual run skips rebuilding and reuses the published images, which makes it the
