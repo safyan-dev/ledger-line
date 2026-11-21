@@ -138,6 +138,17 @@ The script keeps existing values and fills in missing ones. It configures:
 | `Webhooks:Providers:stripe:SigningSecret` | Stripe-shaped provider secret |
 | `Demo:Password` | Local demo owner password |
 | `Demo:PlatformPassword` | Local platform owner password |
+| `Email:Provider` | Email delivery: `outbox` (default) or `smtp` (Mailpit captures; point at an ESP to deliver) |
+
+Email delivery:
+
+```text
+Email:Provider     = outbox                # outbox writes backend/src/Api/email-outbox/
+Email:Smtp:Host    = localhost             # provider=smtp -> Mailpit inbox: http://localhost:8025
+Email:Smtp:Port    = 1025
+```
+
+Mailpit only captures messages for you to read; it never delivers to the recipient's address. To deliver for real, point `Email:Smtp:*` at an SMTP relay. See [docs/deployment/email.md](docs/deployment/email.md).
 
 Override any generated value with `DB_CONNECTION`, `JWT_SIGNING_KEY`, `WEBHOOK_SIGNING_SECRET`, `WEBHOOK_MOCK_SECRET`, `WEBHOOK_STRIPE_SECRET`, `DEMO_PASSWORD`, or `PLATFORM_PASSWORD`.
 
@@ -160,7 +171,12 @@ Webhooks__Providers__stripe__SigningSecret
 Demo__Password
 Demo__PlatformPassword
 Web__PublicBaseUrl
+Email__Provider
+Email__Smtp__Host
+Email__Smtp__Port
 ```
+
+Real email delivery adds `Email__Smtp__Username` and `Email__Smtp__Password`.
 
 `appsettings.json` contains no secrets. User-secrets are plaintext local storage and are not suitable for production.
 
