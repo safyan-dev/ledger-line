@@ -38,15 +38,32 @@ public static class IdentityModule
         services.AddScoped<ICurrentUser, JwtCurrentUser>();
         services.AddScoped<IActorContext, ActorContext>();
 
-        if (configuration.GetValue("Email:WriteToOutbox", false))
-        {
-            services.AddScoped<IEmailSender, FileEmailSender>();
-        }
-        else
-        {
-            services.AddScoped<IEmailSender, LoggingEmailSender>();
-        }
+        RegisterEmailSender(services, configuration);
 
         return services;
+    }
+
+    private static void RegisterEmailSender(IServiceCollection services, IConfiguration configuration)
+    {
+        var provider = configuration["Email:Provider"]?.Trim().ToLowerInvariant();
+
+        if (string.IsNullOrEmpty(provider))
+        {
+            // Legacy switch, kept so existing environments keep working unchanged.
+            provider = configuration.GetValue("Email:WriteToOutbox", false) ? "outbox" : "log";
+        }
+
+        switch (provider)
+        {
+            case "smtp":
+                services.AddScoped<IEmailSender, SmtpEmailSender>();
+                break;
+            case "outbox":
+                services.AddScoped<IEmailSender, FileEmailSender>();
+                break;
+            default:
+                services.AddScoped<IEmailSender, LoggingEmailSender>();
+                break;
+        }
     }
 }
