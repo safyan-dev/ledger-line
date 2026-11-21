@@ -16,6 +16,20 @@ services:
       timeout: 5s
       retries: 10
 
+  # Mailpit captures every message the API sends and shows it in a web inbox.
+  # It does NOT deliver to the recipient's real address — no MX lookup, no relay.
+  # Set Email:Provider=smtp with Email:Smtp:Host=localhost and Port=1025 to use it.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ledgerline-mailpit
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web inbox: http://localhost:8025
+    environment:
+      MP_MAX_MESSAGES: "5000"
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+
   pgadmin:
     image: dpage/pgadmin4:9.19
     container_name: ledgerline-pgadmin
