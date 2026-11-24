@@ -9,7 +9,7 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws: wss:; base-uri 'self'; form-action 'self'"
     />
-    <meta name="theme-color" content="#2563eb" />
+    <meta name="theme-color" content="#474CE1" />
     <meta
       name="description"
       content="Ledgerline — a payment reconciliation workspace for business operations and finance teams."
@@ -39,10 +39,13 @@
         height: 36px;
         place-items: center;
         border-radius: 10px;
-        background: #4f46e5;
+        background: #474ce1;
         color: #fff;
-        font-size: 15px;
-        font-weight: 700;
+      }
+
+      .boot-mark svg {
+        width: 26px;
+        height: 26px;
       }
 
       .boot-copy {
@@ -65,7 +68,7 @@
         width: 16px;
         height: 16px;
         border: 2px solid #dfe3ee;
-        border-top-color: #4f46e5;
+        border-top-color: #474ce1;
         border-radius: 999px;
         animation: boot-spin 0.8s linear infinite;
       }
@@ -82,7 +85,16 @@
   <body>
     <div id="root">
       <div id="boot" role="status" aria-live="polite">
-        <div class="boot-mark">L</div>
+        <div class="boot-mark">
+          <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+            <g fill="none" stroke="#fff" stroke-linecap="round">
+              <path d="M11.9 8.8V21" stroke-width="3" />
+              <path d="M11.9 21h11.4" stroke-width="3" />
+              <path d="M17.3 12.3h4.6" stroke-width="2.4" />
+              <path d="M17.3 16.9h2.4" stroke-width="2.4" />
+            </g>
+          </svg>
+        </div>
         <div class="boot-copy">
           <span class="boot-title">Ledgerline</span>
           <span class="boot-subtitle">Loading payment operations…</span>
