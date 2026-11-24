@@ -12,11 +12,15 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    allowedHosts: ['.localhost'],
+    // Accept any *.localhost workspace host so <tenant>.localhost:5173 works.
+    allowedHosts: ['.localhost', 'localhost'],
     proxy: {
       '/api': {
         target: 'http://localhost:5080',
-        changeOrigin: true,
+        // Preserve the incoming Host header. The API resolves the workspace from
+        // the first host label, so rewriting it to localhost:5080 would strip the
+        // tenant and reject sign-in with "Sign in at your workspace subdomain".
+        changeOrigin: false,
       },
     },
   },
