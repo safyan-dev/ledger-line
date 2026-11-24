@@ -7,8 +7,11 @@ public sealed class TestEmailSender : IEmailSender
 {
     private static readonly object Gate = new();
     private static readonly List<EmailMessage> Messages = new();
+    // Matches "Token: x", "this token: x" and "token to reset your password: x",
+    // but stops at a newline so a token inside a link (?token=...) is not followed
+    // across lines into the URL's "http:" colon.
     private static readonly Regex TokenPattern = new(
-        @"token[^:]*:\s*(\S+)",
+        @"token[^:\n]*:\s*(\S+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)

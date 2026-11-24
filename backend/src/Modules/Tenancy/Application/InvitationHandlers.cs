@@ -1,5 +1,6 @@
 using System.Net.Mail;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using PaymentReconciliation.Modules.Identity.Contracts;
 using PaymentReconciliation.Modules.Tenancy.Contracts;
 using PaymentReconciliation.Modules.Tenancy.Domain;
@@ -102,7 +103,8 @@ public sealed class CreateTenantInvitationHandler(
     ICurrentUser currentUser,
     IIdentityFacade identity,
     ITenantAuthorizer authorizer,
-    IEmailSender emailSender)
+    IEmailSender emailSender,
+    IConfiguration configuration)
     : ICommandHandler<CreateTenantInvitationCommand, IssuedTenantInvitationDto>
 {
     public async Task<Result<IssuedTenantInvitationDto>> Handle(
@@ -248,10 +250,37 @@ public sealed class CreateTenantInvitationHandler(
         var message = new EmailMessage(
             email,
             $"Invitation to {tenant.Name}",
-            $"You have been invited to join '{tenant.Name}' as {role}. "
-            + $"Accept the invitation with this token: {token}");
+            InvitationEmailBody.Build(tenant, role, token, configuration));
 
         return emailSender.SendAsync(message, cancellationToken);
+    }
+}
+
+internal static class InvitationEmailBody
+{
+    public static string Build(
+        Tenant tenant,
+        TenantRole role,
+        string token,
+        IConfiguration configuration)
+    {
+        var baseUrl = configuration["Web:PublicBaseUrl"]?.TrimEnd('/');
+        var link = baseUrl is null
+            ? null
+            : $"{baseUrl}/accept-invitation?token={Uri.EscapeDataString(token)}";
+
+        var body = $"You have been invited to join '{tenant.Name}' as {role}.\n\n";
+
+        if (link is not null)
+        {
+            body += $"Accept the invitation: {link}\n\n";
+        }
+
+        body += link is null
+            ? $"Open {tenant.Name} and accept the invitation with this token: {token}"
+            : $"If the link does not open, go to {baseUrl}/accept-invitation and enter this token: {token}";
+
+        return body;
     }
 }
 
@@ -262,7 +291,8 @@ public sealed class ResendTenantInvitationHandler(
     ITenantContext tenantContext,
     ICurrentUser currentUser,
     ITenantAuthorizer authorizer,
-    IEmailSender emailSender)
+    IEmailSender emailSender,
+    IConfiguration configuration)
     : ICommandHandler<ResendTenantInvitationCommand, IssuedTenantInvitationDto>
 {
     public async Task<Result<IssuedTenantInvitationDto>> Handle(
@@ -329,8 +359,7 @@ public sealed class ResendTenantInvitationHandler(
         var message = new EmailMessage(
             email,
             $"Invitation to {tenant.Name}",
-            $"You have been invited to join '{tenant.Name}' as {role}. "
-            + $"Accept the invitation with this token: {token}");
+            InvitationEmailBody.Build(tenant, role, token, configuration));
 
         return emailSender.SendAsync(message, cancellationToken);
     }
