@@ -45,9 +45,26 @@ public sealed class DemoDataSeeder(
         var averyActor = new AuditActor(AveryId, "Avery Chen", "Operations");
         var systemActor = AuditActor.System;
 
-        dbContext.Set<Actor>().AddRange(
-            Actor.Create(AveryId, "Avery Chen", "avery.chen@ledgerline.local", "Operations", false),
-            Actor.Create(SystemActorId, "system", "system@ledgerline.local", "System", true));
+        // Actors are seeded independently of orders, so a seed interrupted after this
+        // point would hit pk_actors on the next startup.
+        var existingActorIds = await dbContext.Set<Actor>()
+            .IgnoreQueryFilters()
+            .Where(actor => actor.Id == AveryId || actor.Id == SystemActorId)
+            .Select(actor => actor.Id)
+            .ToListAsync(cancellationToken);
+        var existingActors = existingActorIds.ToHashSet();
+
+        if (!existingActors.Contains(AveryId))
+        {
+            dbContext.Set<Actor>().Add(
+                Actor.Create(AveryId, "Avery Chen", "avery.chen@ledgerline.local", "Operations", false));
+        }
+
+        if (!existingActors.Contains(SystemActorId))
+        {
+            dbContext.Set<Actor>().Add(
+                Actor.Create(SystemActorId, "system", "system@ledgerline.local", "System", true));
+        }
 
         var northwind = Order.Create(
             "ORD-2026-0001", "Northwind Traders", "NW-5512", "Q4 platform licence",
