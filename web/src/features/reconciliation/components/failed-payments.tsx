@@ -8,10 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/data/status-badge'
 import { getPayments } from '@/features/payments/api'
 import { formatDateTime } from '@/lib/format'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 
 export function FailedPayments() {
+  const tenantId = useTenantKey()
   const payments = useQuery({
-    queryKey: ['payments', 'reconciliation', 'failed'],
+    queryKey: qk.payments(tenantId, { scope: 'failed' }),
     queryFn: () => getPayments({ page: 1, pageSize: 5, status: 'Failed' }),
   })
   const items = payments.data?.items ?? []

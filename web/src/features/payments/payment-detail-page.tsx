@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ExternalLink,
   Link2,
-  Loader2,
   RefreshCw,
   ScrollText,
   Undo2,
@@ -33,8 +32,11 @@ import { getAuditLogs } from '@/features/audit/api'
 import { getPayment, getRefunds, rerunReconciliation } from '@/features/payments/api'
 import { getReconciliationForPayment } from '@/features/reconciliation/api'
 import { getWebhookEvents } from '@/features/webhooks/api'
-import { errorMessage } from '@/lib/api-client'
+import { errorMessage, errorStateProps } from '@/lib/api-client'
 import { formatDateTime, formatRelative } from '@/lib/format'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { invalidateRelated } from '@/lib/invalidate'
 import {
   actionLabel,
   orderStatusMeta,
@@ -45,39 +47,40 @@ import {
 } from '@/lib/status'
 
 export function PaymentDetailPage() {
+  const tenantId = useTenantKey()
   const { paymentId = '' } = useParams()
   const queryClient = useQueryClient()
   const [activeAction, setActiveAction] = useState<'match' | 'refund' | null>(null)
 
   const paymentQuery = useQuery({
-    queryKey: ['payments', paymentId],
+    queryKey: qk.payment(tenantId, paymentId),
     queryFn: () => getPayment(paymentId),
     enabled: Boolean(paymentId),
   })
   const payment = paymentQuery.data
 
   const orderQuery = useQuery({
-    queryKey: ['orders', payment?.orderId],
+    queryKey: qk.order(tenantId, payment?.orderId),
     queryFn: () => getOrder(payment!.orderId!),
     enabled: Boolean(payment?.orderId),
   })
   const refundsQuery = useQuery({
-    queryKey: ['refunds', paymentId],
+    queryKey: qk.refunds(tenantId, paymentId),
     queryFn: () => getRefunds(paymentId),
     enabled: Boolean(paymentId),
   })
   const reconciliationQuery = useQuery({
-    queryKey: ['reconciliation', 'payment', paymentId],
+    queryKey: qk.reconciliationForPayment(tenantId, paymentId),
     queryFn: () => getReconciliationForPayment(paymentId),
     enabled: Boolean(paymentId),
   })
   const webhooksQuery = useQuery({
-    queryKey: ['webhooks', 'payment', paymentId],
+    queryKey: qk.webhooks(tenantId, { paymentId }),
     queryFn: () => getWebhookEvents({ page: 1, pageSize: 50, paymentId }),
     enabled: Boolean(paymentId),
   })
   const auditQuery = useQuery({
-    queryKey: ['audit', 'payment', paymentId],
+    queryKey: qk.auditFor(tenantId, 'payment', paymentId),
     queryFn: () => getAuditLogs({ page: 1, pageSize: 50, entityType: 'Payment', entityId: paymentId }),
     enabled: Boolean(paymentId),
   })
@@ -86,10 +89,7 @@ export function PaymentDetailPage() {
     mutationFn: () => rerunReconciliation(paymentId),
     onSuccess: () => {
       toast.success('Matching re-run')
-      void queryClient.invalidateQueries({ queryKey: ['payments'] })
-      void queryClient.invalidateQueries({ queryKey: ['reconciliation'] })
-      void queryClient.invalidateQueries({ queryKey: ['orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      invalidateRelated(queryClient, 'payment')
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -99,7 +99,7 @@ export function PaymentDetailPage() {
       <>
         <BackLink />
         <PageHeader title="Payment detail" description="Transaction, reconciliation and processing history." />
-        <ErrorState message={paymentQuery.error.message} onRetry={() => void paymentQuery.refetch()} />
+        <ErrorState {...errorStateProps(paymentQuery.error)} onRetry={() => void paymentQuery.refetch()} />
       </>
     )
   }
@@ -142,12 +142,13 @@ export function PaymentDetailPage() {
               <Undo2 className="size-4" aria-hidden />
               Refund
             </Button>
-            <Button variant="outline" onClick={() => rerun.mutate()} disabled={isMatched || rerun.isPending}>
-              {rerun.isPending ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                <RefreshCw className="size-4" aria-hidden />
-              )}
+            <Button
+              variant="outline"
+              onClick={() => rerun.mutate()}
+              disabled={isMatched}
+              loading={rerun.isPending}
+            >
+              <RefreshCw className="size-4" aria-hidden />
               Re-run matching
             </Button>
             <Button variant="outline" onClick={() => setActiveAction('match')} disabled={isMatched}>

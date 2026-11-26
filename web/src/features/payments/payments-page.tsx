@@ -16,9 +16,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RecordPaymentDialog } from '@/features/payments/components/record-payment-dialog'
 import { getPayments } from '@/features/payments/api'
 import { formatDateTime } from '@/lib/format'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 import { paymentStatusMeta } from '@/lib/status'
 import { useTableParams } from '@/lib/use-table-params'
 import type { PaymentListItemDto } from '@/types/api'
+import { errorStateProps } from '@/lib/api-client'
 
 const columns: DataTableColumn<PaymentListItemDto>[] = [
   {
@@ -104,6 +107,7 @@ const columns: DataTableColumn<PaymentListItemDto>[] = [
 
 export function PaymentsPage() {
   const navigate = useNavigate()
+  const tenantId = useTenantKey()
   const { page, pageSize, get, update, setPage } = useTableParams()
   const status = get('status')
   const provider = get('provider')
@@ -111,7 +115,7 @@ export function PaymentsPage() {
   const orderId = get('orderId')
 
   const payments = useQuery({
-    queryKey: ['payments', { page, pageSize, status, provider, search, orderId }],
+    queryKey: qk.payments(tenantId, { page, pageSize, status, provider, search, orderId }),
     queryFn: () =>
       getPayments({
         page,
@@ -181,7 +185,7 @@ export function PaymentsPage() {
       </FilterBar>
 
       {payments.isError ? (
-        <ErrorState message={payments.error.message} onRetry={() => void payments.refetch()} />
+        <ErrorState {...errorStateProps(payments.error)} onRetry={() => void payments.refetch()} />
       ) : (
         <>
           <DataTable

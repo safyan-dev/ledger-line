@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Ban, ExternalLink, Loader2, Receipt } from 'lucide-react'
+import { ArrowLeft, Ban, ExternalLink, Receipt } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,10 +30,13 @@ import { cancelOrder, getOrder } from '@/features/orders/api'
 import { getPayments } from '@/features/payments/api'
 import { getReconciliationRecords } from '@/features/reconciliation/api'
 import { getAuditLogs } from '@/features/audit/api'
-import { errorMessage } from '@/lib/api-client'
+import { errorMessage, errorStateProps } from '@/lib/api-client'
 import { formatDateTime, formatRelative } from '@/lib/format'
 import { orderStatusMeta, paymentStatusMeta, reconciliationOutcomeMeta, strategyLabel } from '@/lib/status'
 import type { PaymentListItemDto, ReconciliationRecordDto } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const paymentColumns: DataTableColumn<PaymentListItemDto>[] = [
   {
@@ -119,25 +122,26 @@ const reconciliationColumns: DataTableColumn<ReconciliationRecordDto>[] = [
 ]
 
 export function OrderDetailPage() {
+  const tenantId = useTenantKey()
   const { orderId = '' } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [cancelOpen, setCancelOpen] = useState(false)
   const [reason, setReason] = useState('')
 
-  const orderQuery = useQuery({ queryKey: ['orders', orderId], queryFn: () => getOrder(orderId), enabled: Boolean(orderId) })
+  const orderQuery = useQuery({ queryKey: qk.order(tenantId, orderId), queryFn: () => getOrder(orderId), enabled: Boolean(orderId) })
   const paymentsQuery = useQuery({
-    queryKey: ['payments', 'order', orderId],
+    queryKey: qk.paymentsForOrder(tenantId, orderId),
     queryFn: () => getPayments({ page: 1, pageSize: 100, orderId }),
     enabled: Boolean(orderId),
   })
   const reconciliationQuery = useQuery({
-    queryKey: ['reconciliation', 'order', orderId],
+    queryKey: qk.reconciliationForOrder(tenantId, orderId),
     queryFn: () => getReconciliationRecords({ page: 1, pageSize: 100, orderId }),
     enabled: Boolean(orderId),
   })
   const auditQuery = useQuery({
-    queryKey: ['audit', 'order', orderId],
+    queryKey: qk.auditFor(tenantId, 'order', orderId),
     queryFn: () => getAuditLogs({ page: 1, pageSize: 10, entityType: 'Order', entityId: orderId }),
     enabled: Boolean(orderId),
   })
@@ -148,9 +152,7 @@ export function OrderDetailPage() {
       toast.success('Order cancelled')
       setCancelOpen(false)
       setReason('')
-      void queryClient.invalidateQueries({ queryKey: ['orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['audit'] })
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      invalidateRelated(queryClient, 'order')
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -159,7 +161,7 @@ export function OrderDetailPage() {
     return (
       <>
         <PageHeader title="Order" description="Order detail and allocation trail." />
-        <ErrorState message={orderQuery.error.message} onRetry={() => void orderQuery.refetch()} />
+        <ErrorState {...errorStateProps(orderQuery.error)} onRetry={() => void orderQuery.refetch()} />
       </>
     )
   }
@@ -358,7 +360,7 @@ export function OrderDetailPage() {
               onClick={() => cancelMutation.mutate()}
               disabled={!reason.trim() || cancelMutation.isPending}
             >
-              {cancelMutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Ban className="size-4" aria-hidden />}
+              <Ban className="size-4" aria-hidden />
               Cancel order
             </Button>
           </DialogFooter>

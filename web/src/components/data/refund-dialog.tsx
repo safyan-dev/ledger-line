@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Undo2 } from 'lucide-react'
+import { Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { refundPayment } from '@/features/payments/api'
 import { errorMessage } from '@/lib/api-client'
 import { formatMoney } from '@/lib/format'
+import { invalidateRelated } from '@/lib/invalidate'
 
 export function RefundDialog({
   open,
@@ -33,15 +34,45 @@ export function RefundDialog({
   currency?: string
   paymentLabel?: string
 }) {
-  const queryClient = useQueryClient()
-  const [amount, setAmount] = useState('')
-  const [reason, setReason] = useState('')
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Refund payment</DialogTitle>
+          <DialogDescription>
+            {paymentLabel ? `${paymentLabel}. ` : ''}
+            Manual refunds are recorded as succeeded and the order allocation is reversed. Provider refunds are
+            handled by your finance team outside Ledgerline.
+          </DialogDescription>
+        </DialogHeader>
 
-  useEffect(() => {
-    if (!open) return
-    setAmount(maxAmount > 0 ? maxAmount.toFixed(2) : '')
-    setReason('')
-  }, [open, paymentId, maxAmount])
+        {/* DialogContent unmounts when closed, so the form initialises fresh on
+            every open — no effect needed to reset state. */}
+        <RefundForm
+          paymentId={paymentId}
+          maxAmount={maxAmount}
+          currency={currency}
+          onDone={() => onOpenChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function RefundForm({
+  paymentId,
+  maxAmount,
+  currency,
+  onDone,
+}: {
+  paymentId?: string
+  maxAmount: number
+  currency: string
+  onDone: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [amount, setAmount] = useState(() => (maxAmount > 0 ? maxAmount.toFixed(2) : ''))
+  const [reason, setReason] = useState('')
 
   const amountValue = Number(amount)
 
@@ -50,13 +81,8 @@ export function RefundDialog({
       refundPayment(paymentId!, { amount: amountValue, reason: reason.trim() }),
     onSuccess: () => {
       toast.success('Refund recorded')
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      void queryClient.invalidateQueries({ queryKey: ['payments'] })
-      void queryClient.invalidateQueries({ queryKey: ['refunds'] })
-      void queryClient.invalidateQueries({ queryKey: ['reconciliation'] })
-      void queryClient.invalidateQueries({ queryKey: ['orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['audit'] })
-      onOpenChange(false)
+      invalidateRelated(queryClient, 'payment')
+      onDone()
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -70,18 +96,8 @@ export function RefundDialog({
     !mutation.isPending
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Refund payment</DialogTitle>
-          <DialogDescription>
-            {paymentLabel ? `${paymentLabel}. ` : ''}
-            Manual refunds are recorded as succeeded and the order allocation is reversed. Provider refunds are
-            handled by your finance team outside Ledgerline.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
+    <>
+      <div className="space-y-4">
           <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
             <p className="text-xs text-muted-foreground">Refundable amount</p>
             <p className="mt-0.5 text-lg font-semibold tabular-nums">{formatMoney(maxAmount, currency)}</p>
@@ -115,20 +131,15 @@ export function RefundDialog({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={mutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={() => mutation.mutate()} disabled={!canSubmit}>
-            {mutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-            ) : (
-              <Undo2 className="size-4" aria-hidden />
-            )}
-            Record refund
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter>
+        <Button variant="outline" onClick={onDone} disabled={mutation.isPending}>
+          Cancel
+        </Button>
+        <Button onClick={() => mutation.mutate()} disabled={!canSubmit} loading={mutation.isPending}>
+          <Undo2 className="size-4" aria-hidden />
+          Record refund
+        </Button>
+      </DialogFooter>
+    </>
   )
 }

@@ -20,11 +20,15 @@ import { formatDate } from '@/lib/format'
 import { orderStatusMeta } from '@/lib/status'
 import { useTableParams } from '@/lib/use-table-params'
 import type { OrderListItemDto } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { errorStateProps } from '@/lib/api-client'
 
 const columns: DataTableColumn<OrderListItemDto>[] = [
   {
     id: 'order',
     header: 'Order reference',
+    sortable: true,
     cell: (order) => (
       <div className="min-w-0">
         <CopyableId value={order.orderNumber} label="order number" />
@@ -54,6 +58,7 @@ const columns: DataTableColumn<OrderListItemDto>[] = [
   {
     id: 'expected',
     header: 'Expected',
+    sortable: true,
     className: 'hidden text-right md:table-cell',
     cell: (order) => <Money amount={order.expectedAmount} currency={order.currency} />,
   },
@@ -85,6 +90,7 @@ const columns: DataTableColumn<OrderListItemDto>[] = [
   {
     id: 'created',
     header: 'Created',
+    sortable: true,
     className: 'hidden whitespace-nowrap text-right lg:table-cell',
     cell: (order) => <span className="text-xs text-muted-foreground">{formatDate(order.createdAt)}</span>,
   },
@@ -104,7 +110,13 @@ const columns: DataTableColumn<OrderListItemDto>[] = [
   },
 ]
 
+// Column ids differ from API sort tokens for amounts.
+const sortColumn = (sort: string | undefined) =>
+  sort?.startsWith('amount_') ? 'expected' : sort?.split('_')[0]
+const sortToken = (columnId: string) => (columnId === 'expected' ? 'amount' : columnId)
+
 export function OrdersPage() {
+  const tenantId = useTenantKey()
   const navigate = useNavigate()
   const { page, pageSize, get, update, setPage } = useTableParams()
   const status = get('status')
@@ -115,7 +127,7 @@ export function OrdersPage() {
   )
 
   const orders = useQuery({
-    queryKey: ['orders', { page, pageSize, status, search, sort }],
+    queryKey: qk.orders(tenantId, { page, pageSize, status, search, sort }),
     queryFn: () =>
       getOrders({
         page,
@@ -177,7 +189,7 @@ export function OrdersPage() {
       </FilterBar>
 
       {orders.isError ? (
-        <ErrorState message={orders.error.message} onRetry={() => void orders.refetch()} />
+        <ErrorState {...errorStateProps(orders.error)} onRetry={() => void orders.refetch()} />
       ) : (
         <>
           <DataTable
@@ -187,6 +199,9 @@ export function OrdersPage() {
             caption="Customer orders with expected and paid amounts"
             isLoading={orders.isLoading}
             onRowClick={(order) => navigate(`/orders/${order.id}`)}
+            sortKey={sortColumn(sort)}
+            sortDirection={sort?.endsWith('_asc') ? 'asc' : 'desc'}
+            onSortChange={(key, direction) => update({ sort: `${sortToken(key)}_${direction}` })}
             empty={
               <EmptyState
                 icon={<ShoppingCart className="size-4" aria-hidden />}

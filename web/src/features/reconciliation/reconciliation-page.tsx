@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { GitCompareArrows, Link2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/layout/page-header'
 import { DataTable, type DataTableColumn } from '@/components/data/data-table'
@@ -16,12 +15,17 @@ import { ManualMatchDialog } from '@/components/data/manual-match-dialog'
 import { Money } from '@/components/data/money'
 import { SearchInput } from '@/components/data/search-input'
 import { StatusBadge } from '@/components/data/status-badge'
+import { DatePicker } from '@/components/data/date-picker'
 import { FailedPayments } from '@/features/reconciliation/components/failed-payments'
 import { getReconciliationRecords } from '@/features/reconciliation/api'
 import { formatRelative } from '@/lib/format'
 import { reconciliationOutcomeMeta, strategyLabel } from '@/lib/status'
 import { useTableParams } from '@/lib/use-table-params'
 import type { ReconciliationRecordDto } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { errorStateProps } from '@/lib/api-client'
+import { parseDateParam } from '@/lib/date-param'
 
 const tabs = [
   { value: 'all', label: 'All' },
@@ -133,6 +137,7 @@ const columns: DataTableColumn<ReconciliationRecordDto>[] = [
 ]
 
 export function ReconciliationPage() {
+  const tenantId = useTenantKey()
   const { page, pageSize, get, update, setPage } = useTableParams()
   const outcome = get('outcome')
   const search = get('search')
@@ -144,7 +149,7 @@ export function ReconciliationPage() {
   const currencyOnly = reason === 'Currency mismatch'
 
   const records = useQuery({
-    queryKey: ['reconciliation', { page, pageSize, outcome, search, from, to, reason, orderId }],
+    queryKey: qk.reconciliation(tenantId, { page, pageSize, outcome, search, from, to, reason, orderId }),
     queryFn: () =>
       getReconciliationRecords({
         page,
@@ -211,22 +216,22 @@ export function ReconciliationPage() {
         />
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] font-medium text-muted-foreground">From</span>
-          <Input
-            type="date"
+          <DatePicker
             value={from}
-            onChange={(event) => update({ from: event.target.value || undefined })}
-            className="h-9 w-[145px]"
-            aria-label="Reconciliation from date"
+            onChange={(value) => update({ from: value })}
+            placeholder="From date"
+            ariaLabel="Reconciliation from date"
+            toDate={parseDateParam(to)}
           />
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] font-medium text-muted-foreground">To</span>
-          <Input
-            type="date"
+          <DatePicker
             value={to}
-            onChange={(event) => update({ to: event.target.value || undefined })}
-            className="h-9 w-[145px]"
-            aria-label="Reconciliation to date"
+            onChange={(value) => update({ to: value })}
+            placeholder="To date"
+            ariaLabel="Reconciliation to date"
+            fromDate={parseDateParam(from)}
           />
         </div>
         <Button
@@ -266,7 +271,7 @@ export function ReconciliationPage() {
       ) : null}
 
       {records.isError ? (
-        <ErrorState message={records.error.message} onRetry={() => void records.refetch()} />
+        <ErrorState {...errorStateProps(records.error)} onRetry={() => void records.refetch()} />
       ) : (
         <>
           <DataTable

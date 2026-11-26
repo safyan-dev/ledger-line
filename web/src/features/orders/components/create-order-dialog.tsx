@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Controller, useForm } from 'react-hook-form'
-import { Loader2, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { createOrder } from '@/features/orders/api'
 import { errorMessage } from '@/lib/api-client'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const schema = z.object({
   customerName: z.string().trim().min(1, 'Customer name is required.').max(160, 'Customer name must be 160 characters or fewer.'),
@@ -64,8 +65,7 @@ export function CreateOrderDialog({
     mutationFn: createOrder,
     onSuccess: (order) => {
       toast.success(`Order ${order.orderNumber} created`)
-      void queryClient.invalidateQueries({ queryKey: ['orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      invalidateRelated(queryClient, 'order')
       form.reset(defaultValues)
       setOpen(false)
     },
@@ -165,8 +165,8 @@ export function CreateOrderDialog({
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={mutation.isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+            <Button type="submit" loading={mutation.isPending}>
+              <Plus className="size-4" aria-hidden />
               Create order
             </Button>
           </DialogFooter>

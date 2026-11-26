@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Link2, Loader2, RefreshCw, Undo2 } from 'lucide-react'
+import { ExternalLink, Link2, RefreshCw, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -22,9 +22,12 @@ import { Timeline } from '@/components/data/timeline'
 import { ManualMatchDialog } from '@/components/data/manual-match-dialog'
 import { getPayment, getRefunds, rerunReconciliation } from '@/features/payments/api'
 import { getReconciliationForPayment } from '@/features/reconciliation/api'
-import { errorMessage } from '@/lib/api-client'
+import { errorMessage, errorStateProps } from '@/lib/api-client'
 import { formatDateTime, formatRelative } from '@/lib/format'
 import { paymentStatusMeta, reconciliationOutcomeMeta, strategyLabel } from '@/lib/status'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { invalidateRelated } from '@/lib/invalidate'
 
 export function PaymentDetailSheet({
   paymentId,
@@ -33,23 +36,24 @@ export function PaymentDetailSheet({
   paymentId: string | null
   onOpenChange: (open: boolean) => void
 }) {
+  const tenantId = useTenantKey()
   const [activeAction, setActiveAction] = useState<'match' | 'refund' | null>(null)
   const queryClient = useQueryClient()
 
   const paymentQuery = useQuery({
-    queryKey: ['payments', paymentId],
+    queryKey: qk.payment(tenantId, paymentId),
     queryFn: () => getPayment(paymentId!),
     enabled: Boolean(paymentId),
   })
 
   const refundsQuery = useQuery({
-    queryKey: ['refunds', paymentId],
+    queryKey: qk.refunds(tenantId, paymentId),
     queryFn: () => getRefunds(paymentId!),
     enabled: Boolean(paymentId),
   })
 
   const reconciliationQuery = useQuery({
-    queryKey: ['reconciliation', 'payment', paymentId],
+    queryKey: qk.reconciliationForPayment(tenantId, paymentId),
     queryFn: () => getReconciliationForPayment(paymentId!),
     enabled: Boolean(paymentId),
   })
@@ -58,10 +62,7 @@ export function PaymentDetailSheet({
     mutationFn: () => rerunReconciliation(paymentId!),
     onSuccess: () => {
       toast.success('Matching re-run')
-      void queryClient.invalidateQueries({ queryKey: ['payments'] })
-      void queryClient.invalidateQueries({ queryKey: ['reconciliation'] })
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      void queryClient.invalidateQueries({ queryKey: ['orders'] })
+      invalidateRelated(queryClient, 'payment')
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -83,7 +84,7 @@ export function PaymentDetailSheet({
 
           <div className="space-y-6 px-6 py-5">
             {paymentQuery.isError ? (
-              <ErrorState message={paymentQuery.error.message} onRetry={() => void paymentQuery.refetch()} />
+              <ErrorState {...errorStateProps(paymentQuery.error)} onRetry={() => void paymentQuery.refetch()} />
             ) : paymentQuery.isLoading || !payment ? (
               <div className="space-y-3">
                 <Skeleton className="h-6 w-2/3" />
@@ -147,13 +148,10 @@ export function PaymentDetailSheet({
                     variant="outline"
                     size="sm"
                     onClick={() => rerun.mutate()}
-                    disabled={isMatched || rerun.isPending}
+                    disabled={isMatched}
+                    loading={rerun.isPending}
                   >
-                    {rerun.isPending ? (
-                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                    ) : (
-                      <RefreshCw className="size-3.5" aria-hidden />
-                    )}
+                    <RefreshCw className="size-3.5" aria-hidden />
                     Re-run matching
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setActiveAction('match')} disabled={isMatched}>

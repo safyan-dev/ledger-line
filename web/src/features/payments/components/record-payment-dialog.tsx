@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Controller, useForm } from 'react-hook-form'
-import { Loader2, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { recordPayment } from '@/features/payments/api'
 import { errorMessage } from '@/lib/api-client'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const schema = z.object({
   provider: z.string(),
@@ -53,10 +54,7 @@ export function RecordPaymentDialog() {
     mutationFn: recordPayment,
     onSuccess: (payment) => {
       toast.success(`Payment ${payment.providerPaymentId} recorded`)
-      void queryClient.invalidateQueries({ queryKey: ['payments'] })
-      void queryClient.invalidateQueries({ queryKey: ['reconciliation'] })
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      void queryClient.invalidateQueries({ queryKey: ['orders'] })
+      invalidateRelated(queryClient, 'payment')
       form.reset(defaultValues)
       setOpen(false)
     },
@@ -190,8 +188,8 @@ export function RecordPaymentDialog() {
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={mutation.isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+            <Button type="submit" loading={mutation.isPending}>
+              <Plus className="size-4" aria-hidden />
               Record payment
             </Button>
           </DialogFooter>
