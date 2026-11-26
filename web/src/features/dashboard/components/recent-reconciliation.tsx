@@ -9,10 +9,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getReconciliationRecords } from '@/features/reconciliation/api'
 import { formatRelative } from '@/lib/format'
 import { reconciliationOutcomeMeta } from '@/lib/status'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 
 export function RecentReconciliation() {
+  const tenantId = useTenantKey()
   const records = useQuery({
-    queryKey: ['reconciliation', 'dashboard', 'recent'],
+    queryKey: qk.reconciliation(tenantId, { scope: 'recent' }),
     queryFn: () => getReconciliationRecords({ page: 1, pageSize: 6 }),
   })
   const items = records.data?.items ?? []

@@ -9,10 +9,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getPayments } from '@/features/payments/api'
 import { formatRelative } from '@/lib/format'
 import { paymentStatusMeta } from '@/lib/status'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 
 export function RecentPayments() {
+  const tenantId = useTenantKey()
   const payments = useQuery({
-    queryKey: ['payments', 'dashboard', 'recent'],
+    queryKey: qk.payments(tenantId, { scope: 'recent' }),
     queryFn: () => getPayments({ page: 1, pageSize: 6 }),
   })
   const items = payments.data?.items ?? []

@@ -17,6 +17,9 @@ import { StatusBadge } from '@/components/data/status-badge'
 import { getWebhookEvent } from '@/features/webhooks/api'
 import { formatDateTime } from '@/lib/format'
 import { webhookStatusMeta } from '@/lib/status'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { errorStateProps } from '@/lib/api-client'
 
 export function WebhookDetailSheet({
   eventId,
@@ -25,8 +28,9 @@ export function WebhookDetailSheet({
   eventId: string | null
   onOpenChange: (open: boolean) => void
 }) {
+  const tenantId = useTenantKey()
   const query = useQuery({
-    queryKey: ['webhooks', eventId],
+    queryKey: qk.webhook(tenantId, eventId),
     queryFn: () => getWebhookEvent(eventId!),
     enabled: Boolean(eventId),
   })
@@ -49,7 +53,7 @@ export function WebhookDetailSheet({
 
         <div className="space-y-6 px-6 py-5">
           {query.isError ? (
-            <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />
+            <ErrorState {...errorStateProps(query.error)} onRetry={() => void query.refetch()} />
           ) : query.isLoading || !event ? (
             <div className="space-y-3">
               <Skeleton className="h-6 w-1/2" />
@@ -120,7 +124,7 @@ export function WebhookDetailSheet({
 
               {event.status === 'Processing' ? (
                 <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
                   This event is still being processed.
                 </p>
               ) : null}

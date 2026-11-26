@@ -15,6 +15,9 @@ import { formatDateTime, initials } from '@/lib/format'
 import { actionLabel } from '@/lib/status'
 import { useTableParams } from '@/lib/use-table-params'
 import type { AuditLogDto } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { errorStateProps } from '@/lib/api-client'
 
 const columns: DataTableColumn<AuditLogDto>[] = [
   {
@@ -75,6 +78,7 @@ const columns: DataTableColumn<AuditLogDto>[] = [
 ]
 
 export function AuditPage() {
+  const tenantId = useTenantKey()
   const { page, pageSize, get, update, setPage } = useTableParams()
   const module = get('module')
   const search = get('search')
@@ -82,7 +86,7 @@ export function AuditPage() {
   const entityId = get('entityId')
 
   const logs = useQuery({
-    queryKey: ['audit', { page, pageSize, module, search, entityType, entityId }],
+    queryKey: qk.audit(tenantId, { page, pageSize, module, search, entityType, entityId }),
     queryFn: () =>
       getAuditLogs({
         page,
@@ -137,7 +141,7 @@ export function AuditPage() {
       </FilterBar>
 
       {logs.isError ? (
-        <ErrorState message={logs.error.message} onRetry={() => void logs.refetch()} />
+        <ErrorState {...errorStateProps(logs.error)} onRetry={() => void logs.refetch()} />
       ) : (
         <>
           <DataTable

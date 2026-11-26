@@ -25,6 +25,9 @@ import { formatDate, formatDateTime } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
 import { subscriptionStatusMeta } from '@/lib/status'
 import type { Plan } from '@/public-site/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const eventLabels: Record<string, string> = {
   'subscription.activated': 'Plan activated',
@@ -43,21 +46,20 @@ const eventLabels: Record<string, string> = {
 type PendingAction = { type: 'plan'; plan: Plan } | { type: 'cancel' } | null
 
 export function SubscriptionPage() {
+  const tenantId = useTenantKey()
   const { canManageSubscription } = usePermissions()
   const queryClient = useQueryClient()
   const [action, setAction] = useState<PendingAction>(null)
 
-  const subscription = useQuery({ queryKey: ['subscription', 'current'], queryFn: getSubscription })
+  const subscription = useQuery({ queryKey: qk.subscription(tenantId), queryFn: getSubscription })
   const plans = useQuery({ queryKey: ['plans'], queryFn: fetchPlans, staleTime: 5 * 60_000 })
   const history = useQuery({
-    queryKey: ['subscription', 'history', { page: 1, pageSize: 6 }],
+    queryKey: qk.subscriptionHistory(tenantId, { page: 1, pageSize: 6 }),
     queryFn: () => getSubscriptionHistory({ page: 1, pageSize: 6 }),
   })
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ['subscription'] })
-    void queryClient.invalidateQueries({ queryKey: ['usage'] })
-    void queryClient.invalidateQueries({ queryKey: ['team'] })
+      invalidateRelated(queryClient, 'subscription')
   }
 
   const changePlanMutation = useMutation({
@@ -190,7 +192,7 @@ export function SubscriptionPage() {
               {canReactivate ? (
                 <Button onClick={() => reactivateMutation.mutate()} disabled={reactivateMutation.isPending}>
                   {reactivateMutation.isPending ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                    <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden />
                   ) : (
                     <RotateCcw className="size-4" aria-hidden />
                   )}

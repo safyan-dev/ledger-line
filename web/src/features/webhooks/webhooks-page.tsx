@@ -16,6 +16,9 @@ import { formatDateTime } from '@/lib/format'
 import { webhookStatusMeta } from '@/lib/status'
 import { useTableParams } from '@/lib/use-table-params'
 import type { WebhookEventListItemDto } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { errorStateProps } from '@/lib/api-client'
 
 const eventTypes = ['payment.succeeded', 'customer.created']
 
@@ -79,6 +82,7 @@ const columns: DataTableColumn<WebhookEventListItemDto>[] = [
 ]
 
 export function WebhooksPage() {
+  const tenantId = useTenantKey()
   const { page, pageSize, get, update, setPage } = useTableParams()
   const status = get('status')
   const eventType = get('eventType')
@@ -86,7 +90,7 @@ export function WebhooksPage() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
 
   const events = useQuery({
-    queryKey: ['webhooks', { page, pageSize, status, eventType, search }],
+    queryKey: qk.webhooks(tenantId, { page, pageSize, status, eventType, search }),
     queryFn: () =>
       getWebhookEvents({
         page,
@@ -144,7 +148,7 @@ export function WebhooksPage() {
       </FilterBar>
 
       {events.isError ? (
-        <ErrorState message={events.error.message} onRetry={() => void events.refetch()} />
+        <ErrorState {...errorStateProps(events.error)} onRetry={() => void events.refetch()} />
       ) : (
         <>
           <DataTable

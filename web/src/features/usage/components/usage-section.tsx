@@ -6,10 +6,13 @@ import { UsageCard } from '@/features/usage/components/usage-card'
 import { getUsage } from '@/features/usage/api'
 import { errorMessage } from '@/lib/api-client'
 import { usePermissions } from '@/lib/permissions'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 
 export function UsageSection() {
+  const tenantId = useTenantKey()
   const { canManageSubscription } = usePermissions()
-  const usage = useQuery({ queryKey: ['usage'], queryFn: getUsage })
+  const usage = useQuery({ queryKey: qk.usage(tenantId), queryFn: getUsage })
 
   if (usage.isError) {
     return <ErrorState message={errorMessage(usage.error)} onRetry={() => void usage.refetch()} />

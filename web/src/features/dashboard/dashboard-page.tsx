@@ -27,6 +27,8 @@ import { errorMessage } from '@/lib/api-client'
 import { formatAmount, formatPercent } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { DashboardSummary, ReviewQueueItem } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 
 type ReviewQueueAction =
   | { type: 'match'; item: ReviewQueueItem }
@@ -34,11 +36,18 @@ type ReviewQueueAction =
   | null
 
 export function DashboardPage() {
+  const tenantId = useTenantKey()
   const [activeAction, setActiveAction] = useState<ReviewQueueAction>(null)
 
-  const summary = useQuery({ queryKey: ['dashboard'], queryFn: getDashboardSummary })
+  const summary = useQuery({
+    queryKey: qk.dashboard(tenantId),
+    queryFn: getDashboardSummary,
+    // The summary is live: always refetch on mount so a mutation elsewhere is
+    // reflected when the user lands here.
+    staleTime: 0,
+  })
   const amountMismatches = useQuery({
-    queryKey: ['reconciliation', 'dashboard', 'amount-mismatch'],
+    queryKey: qk.reconciliation(tenantId, { scope: 'amount-mismatch' }),
     queryFn: () => getReconciliationRecords({ page: 1, pageSize: 1, outcome: 'AmountMismatch' }),
   })
 

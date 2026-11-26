@@ -13,6 +13,8 @@ import { getDashboardSummary } from '@/features/dashboard/api'
 import { errorMessage } from '@/lib/api-client'
 import { formatAmount, formatDate, formatPercent } from '@/lib/format'
 import type { VolumePoint } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 
 const volumeColumns: DataTableColumn<VolumePoint>[] = [
   {
@@ -41,7 +43,7 @@ const volumeColumns: DataTableColumn<VolumePoint>[] = [
 ]
 
 export function ReportsPage() {
-  const summary = useQuery({ queryKey: ['dashboard'], queryFn: getDashboardSummary })
+  const summary = useQuery({ queryKey: qk.dashboard(useTenantKey()), queryFn: getDashboardSummary, staleTime: 0 })
 
   if (summary.isError) {
     return (

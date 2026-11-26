@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Building2, Loader2, Save } from 'lucide-react'
+import { Building2, Save } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -15,6 +15,9 @@ import { errorMessage } from '@/lib/api-client'
 import { normalizeRole } from '@/lib/roles'
 import { updateSessionTenant } from '@/lib/session'
 import type { TenantSettingsDto } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Enter a workspace name').max(160, 'Use 160 characters or fewer'),
@@ -56,7 +59,7 @@ function WorkspaceForm({ settings }: { settings: TenantSettingsDto }) {
         tenantSlug: updated.slug,
         role: normalizeRole(updated.role),
       })
-      void queryClient.invalidateQueries({ queryKey: ['tenant', 'current'] })
+      invalidateRelated(queryClient, 'tenant')
       form.reset(toFormValues(updated))
       toast.success('Workspace settings saved.')
     },
@@ -121,8 +124,8 @@ function WorkspaceForm({ settings }: { settings: TenantSettingsDto }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={mutation.isPending}>
-          {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
+        <Button type="submit" loading={mutation.isPending}>
+          <Save className="size-4" aria-hidden />
           Save changes
         </Button>
         <Button
@@ -139,7 +142,8 @@ function WorkspaceForm({ settings }: { settings: TenantSettingsDto }) {
 }
 
 export function WorkspaceSettingsPage() {
-  const settings = useQuery({ queryKey: ['tenant', 'current'], queryFn: getCurrentTenant })
+  const tenantId = useTenantKey()
+  const settings = useQuery({ queryKey: qk.tenantCurrent(tenantId), queryFn: getCurrentTenant })
 
   if (settings.isError) {
     return <ErrorState message={errorMessage(settings.error)} onRetry={() => void settings.refetch()} />
