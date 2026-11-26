@@ -11,11 +11,15 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
+export type SortDirection = 'asc' | 'desc'
+
 export type DataTableColumn<T> = {
   id: string
   header: ReactNode
   className?: string
   cell: (row: T) => ReactNode
+  /** Renders a sort button and aria-sort on this column. */
+  sortable?: boolean
 }
 
 export function DataTable<T>({
@@ -28,6 +32,9 @@ export function DataTable<T>({
   onRowClick,
   empty,
   className,
+  sortKey,
+  sortDirection,
+  onSortChange,
 }: {
   columns: DataTableColumn<T>[]
   rows: T[]
@@ -38,6 +45,9 @@ export function DataTable<T>({
   onRowClick?: (row: T) => void
   empty?: ReactNode
   className?: string
+  sortKey?: string
+  sortDirection?: SortDirection
+  onSortChange?: (key: string, direction: SortDirection) => void
 }) {
   return (
     <div
@@ -51,14 +61,41 @@ export function DataTable<T>({
           <TableCaption className="sr-only">{caption}</TableCaption>
           <TableHeader>
             <TableRow className="border-border/80 hover:bg-transparent">
-              {columns.map((column) => (
-                <TableHead
-                  key={column.id}
-                  className={cn('h-10 bg-muted/40 px-3 text-[12px] font-medium text-muted-foreground sm:px-4', column.className)}
-                >
-                  {column.header}
-                </TableHead>
-              ))}
+              {columns.map((column) => {
+                const isActive = column.sortable && sortKey === column.id
+                const ariaSort = isActive
+                  ? sortDirection === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : column.sortable
+                    ? 'none'
+                    : undefined
+
+                return (
+                  <TableHead
+                    key={column.id}
+                    aria-sort={ariaSort}
+                    className={cn('h-10 bg-muted/40 px-3 text-[12px] font-medium text-muted-foreground sm:px-4', column.className)}
+                  >
+                    {column.sortable && onSortChange ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onSortChange(column.id, isActive && sortDirection === 'asc' ? 'desc' : 'asc')
+                        }
+                        className="inline-flex items-center gap-1 rounded-sm outline-none transition-colors duration-150 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                      >
+                        {column.header}
+                        <span aria-hidden className="text-[10px] leading-none">
+                          {isActive ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                        </span>
+                      </button>
+                    ) : (
+                      column.header
+                    )}
+                  </TableHead>
+                )
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>
