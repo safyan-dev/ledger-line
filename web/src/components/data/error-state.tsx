@@ -4,10 +4,12 @@ import { cn } from '@/lib/utils'
 
 export function ErrorState({
   message,
+  code,
   onRetry,
   className,
 }: {
   message?: string
+  code?: string
   onRetry?: () => void
   className?: string
 }) {
@@ -25,6 +27,9 @@ export function ErrorState({
       <div>
         <p className="text-sm font-medium text-foreground">Could not load this data</p>
         <p className="mt-1 max-w-md text-xs text-muted-foreground">{message ?? 'The API did not respond as expected.'}</p>
+        {code ? (
+          <p className="mt-1.5 font-mono text-[11px] text-muted-foreground/80">{code}</p>
+        ) : null}
       </div>
       {onRetry ? (
         <Button variant="outline" size="sm" onClick={onRetry}>

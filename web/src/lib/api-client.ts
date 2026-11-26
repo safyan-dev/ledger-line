@@ -128,3 +128,13 @@ export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return 'Something went wrong. Try again.'
 }
+
+// Single error contract for query failures. Using raw `error.message` leaks
+// transport text ("Failed to fetch") and drops the API error code, so the same
+// failure reads differently per screen. Every <ErrorState> takes these props.
+export function errorStateProps(error: unknown): { message: string; code?: string } {
+  return {
+    message: errorMessage(error),
+    code: error instanceof ApiError ? error.code : undefined,
+  }
+}
