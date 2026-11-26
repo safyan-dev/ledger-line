@@ -13,6 +13,7 @@ import { registerTenantRequest } from '@/lib/auth-api'
 import { normalizeRole } from '@/lib/roles'
 import { getSelectedPlan, saveSession, type SelectedPlan } from '@/lib/session'
 import { usePageTitle } from '@/lib/use-page-title'
+import { goToWorkspace } from '@/lib/workspace-url'
 import { cn } from '@/lib/utils'
 
 const schema = z.object({
@@ -102,7 +103,7 @@ export function SignUpPage() {
       }
 
       queryClient.clear()
-      saveSession({
+      const next = {
         accessToken: response.session.accessToken,
         refreshToken: response.session.refreshToken,
         tenantId: response.tenant.id,
@@ -110,7 +111,14 @@ export function SignUpPage() {
         tenantSlug: response.tenant.slug,
         role: normalizeRole(response.tenant.role),
         user: response.session.user,
-      })
+      }
+      saveSession(next)
+
+      // Registering from an existing workspace must move the browser to the new
+      // subdomain. The API resolves the tenant from the Host header, so staying
+      // on the old host would keep loading the old workspace. localStorage is
+      // per origin, so the session is handed across with the redirect.
+      if (goToWorkspace(response.tenant.slug, '/dashboard', next)) return
 
       navigate('/dashboard', { replace: true })
     } catch (error) {

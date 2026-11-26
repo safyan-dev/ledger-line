@@ -13,6 +13,8 @@ import { ApiError, errorMessage } from '@/lib/api-client'
 import { normalizeRole } from '@/lib/roles'
 import { saveSession, updateSessionTenant, useSession, type AuthSession } from '@/lib/session'
 import { usePageTitle } from '@/lib/use-page-title'
+import { currentSession } from '@/lib/session-handoff'
+import { goToWorkspace } from '@/lib/workspace-url'
 
 const schema = z
   .object({
@@ -58,6 +60,7 @@ export function AcceptInvitationPage() {
         tenantSlug: response.tenantSlug,
         role: normalizeRole(response.role),
       })
+      if (goToWorkspace(response.tenantSlug, '/dashboard', currentSession())) return
       navigate('/dashboard', { replace: true })
     },
     onError: (error) => setFormError(errorMessage(error)),
@@ -79,6 +82,9 @@ export function AcceptInvitationPage() {
           user: response.session.user,
         }
         saveSession(next)
+        if (goToWorkspace(response.tenantSlug, '/dashboard', next)) return
+      } else if (goToWorkspace(response.tenantSlug, '/dashboard', currentSession())) {
+        return
       }
       navigate('/dashboard', { replace: true })
     },
