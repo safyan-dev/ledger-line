@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, MailPlus } from 'lucide-react'
+import { MailPlus } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { inviteMember } from '@/features/team/api'
 import { errorMessage } from '@/lib/api-client'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const schema = z.object({
   email: z.string().trim().min(1, 'Enter an email address').email('Enter a valid email address'),
@@ -42,8 +43,7 @@ export function InviteMemberDialog() {
     onSuccess: (response) => {
       toast.success(`Invitation sent to ${response.invitation.email}`)
       form.reset({ email: '', role: 'Finance' })
-      void queryClient.invalidateQueries({ queryKey: ['team'] })
-      void queryClient.invalidateQueries({ queryKey: ['usage'] })
+      invalidateRelated(queryClient, 'invitation')
       setOpen(false)
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -110,8 +110,8 @@ export function InviteMemberDialog() {
             <Button type="button" variant="outline" onClick={close} disabled={mutation.isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <MailPlus className="size-4" aria-hidden />}
+            <Button type="submit" loading={mutation.isPending}>
+              <MailPlus className="size-4" aria-hidden />
               Send invitation
             </Button>
           </DialogFooter>

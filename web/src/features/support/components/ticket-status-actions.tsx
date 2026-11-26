@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Workflow } from 'lucide-react'
+import { Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { changeTicketStatus } from '@/features/support/api'
 import { errorMessage } from '@/lib/api-client'
 import { supportTicketStatusMeta } from '@/lib/status'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const transitions: Record<string, string[]> = {
   Open: ['InProgress', 'WaitingForCustomer', 'Resolved'],
@@ -31,7 +32,7 @@ export function TicketStatusActions({
     mutationFn: () => changeTicketStatus(ticketId, nextStatus),
     onSuccess: () => {
       toast.success('Ticket status updated.')
-      void queryClient.invalidateQueries({ queryKey: ['support'] })
+      invalidateRelated(queryClient, 'ticket')
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -57,8 +58,8 @@ export function TicketStatusActions({
           })}
         </SelectContent>
       </Select>
-      <Button type="button" onClick={() => mutation.mutate()} disabled={!nextStatus || mutation.isPending}>
-        {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Workflow className="size-4" aria-hidden />}
+      <Button type="button" onClick={() => mutation.mutate()} disabled={!nextStatus} loading={mutation.isPending}>
+        <Workflow className="size-4" aria-hidden />
         Update status
       </Button>
     </div>

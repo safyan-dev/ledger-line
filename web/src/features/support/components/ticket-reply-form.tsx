@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { replyToTicket } from '@/features/support/api'
 import { errorMessage } from '@/lib/api-client'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const schema = z.object({
   body: z.string().trim().min(1, 'Enter a reply').max(4000, 'Use 4000 characters or fewer'),
@@ -28,7 +29,7 @@ export function TicketReplyForm({ ticketId }: { ticketId: string }) {
     onSuccess: () => {
       toast.success('Reply added.')
       form.reset({ body: '' })
-      void queryClient.invalidateQueries({ queryKey: ['support'] })
+      invalidateRelated(queryClient, 'ticket')
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -44,8 +45,8 @@ export function TicketReplyForm({ ticketId }: { ticketId: string }) {
           <p className="text-xs text-destructive">{form.formState.errors.body.message}</p>
         ) : null}
       </div>
-      <Button type="submit" disabled={mutation.isPending}>
-        {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}
+      <Button type="submit" loading={mutation.isPending}>
+        <Send className="size-4" aria-hidden />
         Send reply
       </Button>
     </form>

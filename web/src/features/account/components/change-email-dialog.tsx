@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { confirmEmailChange, requestEmailChange } from '@/features/account/api'
 import { errorMessage } from '@/lib/api-client'
 import { updateSessionUser } from '@/lib/session'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const emailSchema = z.object({
   newEmail: z.string().trim().min(1, 'Enter the new email address').email('Enter a valid email address'),
@@ -64,7 +65,7 @@ export function ChangeEmailDialog({
     mutationFn: () => confirmEmailChange(form.getValues('newEmail'), token),
     onSuccess: (user) => {
       updateSessionUser(user)
-      void queryClient.invalidateQueries({ queryKey: ['account', 'profile'] })
+      invalidateRelated(queryClient, 'account')
       toast.success('Email address updated.')
       close()
     },
@@ -111,7 +112,7 @@ export function ChangeEmailDialog({
               </Button>
               <Button type="submit" disabled={requestMutation.isPending}>
                 {requestMutation.isPending ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden />
                 ) : (
                   <MailCheck className="size-4" aria-hidden />
                 )}
@@ -140,7 +141,7 @@ export function ChangeEmailDialog({
                 disabled={!token.trim() || confirmMutation.isPending}
               >
                 {confirmMutation.isPending ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden />
                 ) : (
                   <MailCheck className="size-4" aria-hidden />
                 )}

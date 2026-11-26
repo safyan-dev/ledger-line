@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, ShieldCheck } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { changeMemberRole } from '@/features/team/api'
 import { errorMessage } from '@/lib/api-client'
 import type { TenantMemberDto } from '@/types/api'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const schema = z.object({
   role: z.enum(['TenantAdmin', 'Finance']),
@@ -44,9 +45,7 @@ export function ChangeRoleDialog({
     mutationFn: (values: FormValues) => changeMemberRole(member.userId, values.role),
     onSuccess: () => {
       toast.success('Member role updated.')
-      void queryClient.invalidateQueries({ queryKey: ['team'] })
-      void queryClient.invalidateQueries({ queryKey: ['audit'] })
-      void queryClient.invalidateQueries({ queryKey: ['tenant', 'current'] })
+      invalidateRelated(queryClient, 'member')
       onOpenChange(false)
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -86,8 +85,8 @@ export function ChangeRoleDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={mutation.isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ShieldCheck className="size-4" aria-hidden />}
+            <Button type="submit" loading={mutation.isPending}>
+              <ShieldCheck className="size-4" aria-hidden />
               Save role
             </Button>
           </DialogFooter>

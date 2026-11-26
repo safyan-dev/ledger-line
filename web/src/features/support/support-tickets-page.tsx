@@ -22,6 +22,8 @@ import {
 } from '@/lib/status'
 import { useTableParams } from '@/lib/use-table-params'
 import type { SupportTicketDto } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 
 const columns: DataTableColumn<SupportTicketDto>[] = [
   {
@@ -81,6 +83,7 @@ const columns: DataTableColumn<SupportTicketDto>[] = [
 ]
 
 export function SupportTicketsPage() {
+  const tenantId = useTenantKey()
   const navigate = useNavigate()
   const { page, pageSize, get, update, setPage } = useTableParams()
   const status = get('status')
@@ -88,7 +91,7 @@ export function SupportTicketsPage() {
   const priority = get('priority')
 
   const tickets = useQuery({
-    queryKey: ['support', 'tickets', { page, pageSize, status, category, priority }],
+    queryKey: qk.supportTickets(tenantId, { page, pageSize, status, category, priority }),
     queryFn: () =>
       getTickets({
         page,

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { BadgeCheck, CircleAlert, Loader2, Mail, Save, ShieldCheck } from 'lucide-react'
+import { BadgeCheck, CircleAlert, Mail, Save, ShieldCheck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -21,6 +21,8 @@ import { usePermissions } from '@/lib/permissions'
 import { roleLabel } from '@/lib/roles'
 import { updateSessionUser } from '@/lib/session'
 import type { AuthUser } from '@/lib/auth-api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 
 const profileSchema = z.object({
   displayName: z.string().trim().min(1, 'Enter your name').max(160, 'Use 160 characters or fewer'),
@@ -29,6 +31,7 @@ const profileSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileSchema>
 
 function ProfileForm({ profile }: { profile: AuthUser }) {
+  const tenantId = useTenantKey()
   const queryClient = useQueryClient()
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -39,7 +42,7 @@ function ProfileForm({ profile }: { profile: AuthUser }) {
     mutationFn: updateProfile,
     onSuccess: (user) => {
       updateSessionUser(user)
-      void queryClient.invalidateQueries({ queryKey: ['account', 'profile'] })
+      void queryClient.invalidateQueries({ queryKey: qk.accountProfile(tenantId) })
       toast.success('Profile updated.')
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -56,8 +59,8 @@ function ProfileForm({ profile }: { profile: AuthUser }) {
           <p className="text-xs text-destructive">{form.formState.errors.displayName.message}</p>
         ) : null}
       </div>
-      <Button type="submit" disabled={mutation.isPending}>
-        {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
+      <Button type="submit" loading={mutation.isPending}>
+        <Save className="size-4" aria-hidden />
         Save profile
       </Button>
     </form>
@@ -67,7 +70,7 @@ function ProfileForm({ profile }: { profile: AuthUser }) {
 export function AccountPage() {
   const { role } = usePermissions()
   const [emailOpen, setEmailOpen] = useState(false)
-  const profile = useQuery({ queryKey: ['account', 'profile'], queryFn: getProfile })
+  const profile = useQuery({ queryKey: qk.accountProfile(useTenantKey()), queryFn: getProfile })
 
   if (profile.isError) {
     return <ErrorState message={errorMessage(profile.error)} onRetry={() => void profile.refetch()} />

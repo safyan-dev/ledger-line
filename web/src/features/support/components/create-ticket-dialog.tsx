@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { createTicket } from '@/features/support/api'
 import { errorMessage } from '@/lib/api-client'
+import { invalidateRelated } from '@/lib/invalidate'
 
 const schema = z.object({
   subject: z.string().trim().min(1, 'Enter a subject').max(200, 'Use 200 characters or fewer'),
@@ -62,7 +63,7 @@ export function CreateTicketDialog() {
       toast.success('Support ticket created.')
       form.reset(defaultValues)
       setOpen(false)
-      void queryClient.invalidateQueries({ queryKey: ['support'] })
+      invalidateRelated(queryClient, 'ticket')
       navigate(`/support/tickets/${ticket.id}`)
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -151,8 +152,8 @@ export function CreateTicketDialog() {
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={mutation.isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+            <Button type="submit" loading={mutation.isPending}>
+              <Plus className="size-4" aria-hidden />
               Create ticket
             </Button>
           </DialogFooter>

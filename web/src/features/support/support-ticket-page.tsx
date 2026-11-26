@@ -16,6 +16,8 @@ import { getTicket } from '@/features/support/api'
 import { errorMessage } from '@/lib/api-client'
 import { formatDateTime } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
 import {
   supportTicketCategoryMeta,
   supportTicketPriorityMeta,
@@ -23,11 +25,12 @@ import {
 } from '@/lib/status'
 
 export function SupportTicketPage() {
+  const tenantId = useTenantKey()
   const { ticketId } = useParams<{ ticketId: string }>()
   const { canResolveTickets } = usePermissions()
 
   const ticket = useQuery({
-    queryKey: ['support', 'ticket', ticketId],
+    queryKey: qk.supportTicket(tenantId, ticketId),
     queryFn: () => getTicket(ticketId!),
     enabled: Boolean(ticketId),
   })

@@ -4,6 +4,9 @@ import { Loader2, Mail, RefreshCw, ShieldX, UserMinus, Users } from 'lucide-reac
 import { toast } from 'sonner'
 import { DataTable, type DataTableColumn } from '@/components/data/data-table'
 import { EmptyState } from '@/components/data/empty-state'
+import { FilterBar } from '@/components/data/filter-bar'
+import { FilterReset } from '@/components/data/filter-reset'
+import { SearchInput } from '@/components/data/search-input'
 import { ErrorState } from '@/components/data/error-state'
 import { ListPagination } from '@/components/data/list-pagination'
 import { StatusBadge } from '@/components/data/status-badge'
@@ -32,20 +35,26 @@ import {
 } from '@/lib/status'
 import { useTableParams } from '@/lib/use-table-params'
 import type { TenantInvitationDto, TenantMemberDto } from '@/types/api'
+import { qk } from '@/lib/query-keys'
+import { useTenantKey } from '@/lib/use-tenant-key'
+import { invalidateRelated } from '@/lib/invalidate'
 
 export function TeamPage() {
+  const tenantId = useTenantKey()
   const { role } = usePermissions()
   const queryClient = useQueryClient()
   const { page, pageSize, get, update, setPage } = useTableParams()
   const status = get('status')
+  const memberSearch = get('memberSearch')
+  const memberRole = get('memberRole')
 
   const [roleTarget, setRoleTarget] = useState<TenantMemberDto | null>(null)
   const [removeTarget, setRemoveTarget] = useState<TenantMemberDto | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<TenantInvitationDto | null>(null)
 
-  const members = useQuery({ queryKey: ['team', 'members'], queryFn: getMembers })
+  const members = useQuery({ queryKey: qk.teamMembers(tenantId), queryFn: getMembers })
   const invitations = useQuery({
-    queryKey: ['team', 'invitations', { page, pageSize, status }],
+    queryKey: qk.teamInvitations(tenantId, { page, pageSize, status }),
     queryFn: () =>
       getInvitations({
         page,
@@ -54,15 +63,24 @@ export function TeamPage() {
       }),
   })
 
+  // Members come back unpaginated (plan limits cap the list), so filtering is
+  // local and needs no round trip.
+  const filteredMembers = (members.data ?? []).filter((member) => {
+    if (memberRole && member.role !== memberRole) return false
+    if (!memberSearch) return true
+    const term = memberSearch.toLowerCase()
+    return (
+      member.displayName?.toLowerCase().includes(term) ||
+      member.email.toLowerCase().includes(term)
+    )
+  })
+
   const removeMutation = useMutation({
     mutationFn: removeMember,
     onSuccess: () => {
       toast.success('Team member removed.')
       setRemoveTarget(null)
-      void queryClient.invalidateQueries({ queryKey: ['team'] })
-      void queryClient.invalidateQueries({ queryKey: ['usage'] })
-      void queryClient.invalidateQueries({ queryKey: ['tenant', 'current'] })
-      void queryClient.invalidateQueries({ queryKey: ['audit'] })
+      invalidateRelated(queryClient, 'member', 'invitation')
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -72,7 +90,7 @@ export function TeamPage() {
     onSuccess: () => {
       toast.success('Invitation revoked.')
       setRevokeTarget(null)
-      void queryClient.invalidateQueries({ queryKey: ['team'] })
+      invalidateRelated(queryClient, 'member', 'invitation')
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -81,7 +99,7 @@ export function TeamPage() {
     mutationFn: resendInvitation,
     onSuccess: (response) => {
       toast.success(`Invitation resent to ${response.invitation.email}`)
-      void queryClient.invalidateQueries({ queryKey: ['team'] })
+      invalidateRelated(queryClient, 'member', 'invitation')
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
@@ -205,7 +223,7 @@ export function TeamPage() {
               size="sm"
               className="h-7 px-2 text-xs"
               onClick={() => resendMutation.mutate(invitation.id)}
-              disabled={resendMutation.isPending}
+              loading={resendMutation.isPending && resendMutation.variables === invitation.id}
             >
               <RefreshCw className="size-3.5" aria-hidden />
               Resend
@@ -250,23 +268,61 @@ export function TeamPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="members" className="mt-4">
+        <TabsContent value="members" className="mt-4 space-y-4">
+          <FilterBar>
+            <SearchInput
+              key={memberSearch}
+              defaultValue={memberSearch}
+              onCommit={(value) => update({ memberSearch: value || undefined })}
+              placeholder="Search members"
+            />
+            <Select
+              value={memberRole || 'all'}
+              onValueChange={(value) => update({ memberRole: value === 'all' ? undefined : value })}
+            >
+              <SelectTrigger className="h-9 w-[180px]" aria-label="Filter members by role">
+                <SelectValue placeholder="All roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                <SelectItem value="Owner">Owner</SelectItem>
+                <SelectItem value="Admin">Admin</SelectItem>
+                <SelectItem value="Member">Member</SelectItem>
+                <SelectItem value="Viewer">Viewer</SelectItem>
+              </SelectContent>
+            </Select>
+            <FilterReset
+              visible={Boolean(memberSearch || memberRole)}
+              onClick={() => update({ memberSearch: undefined, memberRole: undefined })}
+            />
+          </FilterBar>
+
           {members.isError ? (
             <ErrorState message={errorMessage(members.error)} onRetry={() => void members.refetch()} />
           ) : (
             <DataTable
               columns={memberColumns}
-              rows={members.data ?? []}
+              rows={filteredMembers}
               getRowKey={(member) => member.userId}
               caption="Workspace team members"
               isLoading={members.isLoading}
-              empty={<EmptyState icon={<Users className="size-4" aria-hidden />} title="No team members" description="Invite a teammate to collaborate in this workspace." />}
+              empty={
+                memberSearch || memberRole ? (
+                  <EmptyState
+                    icon={<Users className="size-4" aria-hidden />}
+                    title="No matching members"
+                    description="Clear the filters to see everyone in this workspace."
+                  />
+                ) : (
+                  <EmptyState icon={<Users className="size-4" aria-hidden />} title="No team members" description="Invite a teammate to collaborate in this workspace." />
+                )
+              }
             />
           )}
         </TabsContent>
 
         <TabsContent value="invitations" className="mt-4 space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
+          <FilterBar>
             <Select
               value={status || 'all'}
               onValueChange={(value) => update({ status: value === 'all' ? undefined : value })}
@@ -282,7 +338,7 @@ export function TeamPage() {
                 <SelectItem value="Revoked">Revoked</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </FilterBar>
 
           {invitations.isError ? (
             <ErrorState message={errorMessage(invitations.error)} onRetry={() => void invitations.refetch()} />
@@ -339,7 +395,7 @@ export function TeamPage() {
 
       {resendMutation.isPending ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
           Sending invitation…
         </p>
       ) : null}
