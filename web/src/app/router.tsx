@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react'
 import { createBrowserRouter, Link, Navigate, RouterProvider, useRouteError } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { AppShell } from '@/components/layout/app-shell'
@@ -114,10 +114,24 @@ function withSuspense(element: ReactNode) {
 function RequireSession({ children }: { children: ReactNode }) {
   const session = useSession()
   const queryClient = useQueryClient()
+  const tenantId = session?.tenantId ?? null
+  const previousTenantId = useRef<string | null>(tenantId)
 
+  // Every cached query is tenant-scoped data. Signing out or switching workspace
+  // must drop the cache, otherwise the previous tenant's rows stay fresh for the
+  // whole staleTime and render under the new tenant.
   useEffect(() => {
-    if (!session) queryClient.clear()
-  }, [session, queryClient])
+    if (!session) {
+      queryClient.clear()
+      previousTenantId.current = null
+      return
+    }
+
+    if (previousTenantId.current !== tenantId) {
+      queryClient.clear()
+      previousTenantId.current = tenantId
+    }
+  }, [session, tenantId, queryClient])
 
   if (!session) {
     return <Navigate to="/sign-in" replace />
