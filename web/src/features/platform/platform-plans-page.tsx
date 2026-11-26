@@ -154,7 +154,6 @@ export function PlatformPlansPage() {
                     variant={plan.isActive ? 'outline' : 'default'}
                     size="sm"
                     onClick={() => setPlanToToggle(plan)}
-                    disabled={statusMutation.isPending}
                   >
                     {plan.isActive ? 'Deactivate' : 'Activate'}
                   </Button>
@@ -185,7 +184,12 @@ export function PlatformPlansPage() {
                           size="sm"
                           variant={feature.included ? 'secondary' : 'outline'}
                           aria-pressed={feature.included}
-                          disabled={featureMutation.isPending || !plan.isActive}
+                          disabled={!plan.isActive}
+                          loading={
+                            featureMutation.isPending &&
+                            featureMutation.variables?.code === plan.code &&
+                            featureMutation.variables?.key === feature.key
+                          }
                           onClick={() =>
                             featureMutation.mutate({
                               code: plan.code,

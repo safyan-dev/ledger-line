@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, LockKeyhole } from 'lucide-react'
+import { LockKeyhole } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -91,8 +91,8 @@ export function ChangePasswordForm() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={mutation.isPending}>
-          {mutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <LockKeyhole className="size-4" aria-hidden />}
+        <Button type="submit" loading={mutation.isPending}>
+          <LockKeyhole className="size-4" aria-hidden />
           Change password
         </Button>
         <p className="text-xs text-muted-foreground">

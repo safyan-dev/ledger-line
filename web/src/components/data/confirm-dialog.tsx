@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -47,9 +46,8 @@ export function ConfirmDialog({
             type="button"
             variant={destructive ? 'destructive' : 'default'}
             onClick={onConfirm}
-            disabled={pending}
+            loading={pending}
           >
-            {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
             {confirmLabel}
           </Button>
         </DialogFooter>
