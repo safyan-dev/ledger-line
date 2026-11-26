@@ -137,6 +137,26 @@
   h3 {
     @apply tracking-tight;
   }
+
+  /* Tailwind v4 preflight no longer sets a pointer cursor on interactive
+     elements, so clickable rows, links and buttons fell back to the text
+     cursor. Disabled controls must not look clickable. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab']:not([aria-disabled='true']),
+  [role='menuitem']:not([aria-disabled='true']),
+  [role='option']:not([aria-disabled='true']),
+  a[href],
+  label[for],
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
 }
 
 @keyframes public-flow {
